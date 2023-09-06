@@ -1,0 +1,2124 @@
+<?xml version="1.0" encoding="utf-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+    <id>https://wjcsw.github.io</id>
+    <title>想见山海</title>
+    <updated>2023-09-06T13:27:28.858Z</updated>
+    <generator>https://github.com/jpmonette/feed</generator>
+    <link rel="alternate" href="https://wjcsw.github.io"/>
+    <link rel="self" href="https://wjcsw.github.io/atom.xml"/>
+    <subtitle>个人学习博客</subtitle>
+    <logo>https://wjcsw.github.io/images/avatar.png</logo>
+    <icon>https://wjcsw.github.io/favicon.ico</icon>
+    <rights>All rights reserved 2023, 想见山海</rights>
+    <entry>
+        <title type="html"><![CDATA[[OpenGL入门教程] 11. 材质与光照贴图]]></title>
+        <id>https://wjcsw.github.io/BBZegAhYY/</id>
+        <link href="https://wjcsw.github.io/BBZegAhYY/">
+        </link>
+        <updated>2023-08-26T13:36:50.000Z</updated>
+        <content type="html"><![CDATA[<h2 id="材质">材质</h2>
+<p>不同的物体对光的反射效果也不同，这里用材质来描述这种性质。</p>
+<pre><code class="language-GLSL">struct Material {
+    vec3 ambient;
+    vec3 diffuse;
+    vec3 specular;
+    float shininess;
+}; 
+</code></pre>
+<p>材质的定义是与光照模型的定义相对应的，按照之前使用的冯氏光照模型，物体颜色的组成主要有四个部分：环境光照、漫反射光照，镜面光照以及反光度。根据上述规则可以定义出对应该模型的材质的结构体。</p>
+<p>实际实践中，环境光照一般都取与反射光照相同的颜色，因此可以不用添加，如果你希望的话，也可以保留。而为了更加精细的对物体的每个片段单独设置颜色，可以使用漫反射纹理贴图与镜面反射纹理贴图来进行控制，替代直接使用分量全局执行。</p>
+<p>镜面反射纹理贴图是一个专门用于镜面高光的纹理贴图。它是一个黑白的（如果你想得话也可以是彩色的）纹理，来定义物体每部分的镜面光强度。在镜面反射纹理贴图中，一个像素越「白」，物体的镜面光分量就会越亮。如图所示是一个镜面反射纹理贴图：<br>
+<img src="https://wjcsw.github.io/post-images/1693489139613.png" alt="" loading="lazy"></p>
+<p>使用Photoshop或Gimp之类的工具，将漫反射纹理转换为镜面光纹理还是比较容易的，只需要剪切掉一些部分，将图像转换为黑白的，并增加亮度/对比度就好了。</p>
+<p>因此，进一步可以将材料结构体定义如下：</p>
+<pre><code class="language-GLSL">struct Material {
+    sampler2D diffuse;
+    sampler2D specular;
+    float shininess;
+}; 
+in vec2 TexCoords;
+uniform Material material;
+</code></pre>
+<p>这里使用纹理的方式与之前基本完全相同。而由于这里还需要纹理坐标，因此和之前的类似，还需要传入纹理坐标。</p>
+<p>接着，从CPU程序中通过uniform将材质传入。注意，从外面传结构体时，需要对结构体的每个变量单独传值。具体实现如下：</p>
+<pre><code class="language-c++">shader.SetUniform1i(&quot;material.specular&quot;, 1);
+shader.SetUniform1f(&quot;material.shininess&quot;, 25.0f);
+shader.SetUniform1i(&quot;material.diffuse&quot;, 0);
+</code></pre>
+<h2 id="光源">光源</h2>
+<p>影响物体表现的除了物体本身，当然还有光源的情况。同样的，对应的光源属性也有四个，用于控制这四种光照对物体的影响。</p>
+<pre><code class="language-GLSL">struct Light {
+    vec3 position;
+    vec3 ambient;
+    vec3 diffuse;
+    vec3 specular;
+};
+
+uniform Light light;
+</code></pre>
+<p>这里将其定义为向量形式即可，因为这里光源本身可以视作是一个整体。</p>
+<p>同样，将对应值通过uniform传入即可。</p>
+<p>那么，根据上面定义好的物理材质和光源属性，就可以得到对应的光照情况下的物体了。基本上就是在之前的光照模型的基础上稍加改动，将固定值改为了传入的材料和光源属性。</p>
+<pre><code class="language-GLSL">void main()
+{
+    vec3 ambient = light.ambient * vec3(texture(material.diffuse, TexCoords));
+
+    vec3 norm = normalize(Normal);
+    vec3 lightDir = normalize(LightPos - FragPos);
+
+    float diff = max(dot(norm, lightDir), 0.0);
+    vec3 diffuse = light.diffuse * diff * vec3(texture(material.diffuse, TexCoords));
+
+    vec3 viewDir = normalize(-FragPos);
+    vec3 reflectDir = reflect(-lightDir, norm);
+    float spec = pow(max(dot(viewDir, reflectDir), 0.0), material.shininess);
+    vec3 specular = light.specular * spec * vec3(texture(material.specular, TexCoords));
+
+    vec3 result = ambient + diffuse + specular;
+    FragColor = vec4(result, 1.0);
+}
+</code></pre>
+<p>加入了上述结构后，可以使得程序显示出一个更加真实的光照情况。最终效果如下：<br>
+<img src="https://wjcsw.github.io/post-images/1693489110512.png" alt="" loading="lazy"></p>
+<h2 id="参考资料">参考资料</h2>
+<p>[1] https://learnopengl-cn.readthedocs.io/zh/latest/01%20Getting%20started/03%20Hello%20Window/</p>
+]]></content>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[[OpenGL入门教程] 10. 加入光照]]></title>
+        <id>https://wjcsw.github.io/kcs6-FlyI/</id>
+        <link href="https://wjcsw.github.io/kcs6-FlyI/">
+        </link>
+        <updated>2023-08-24T08:56:07.000Z</updated>
+        <content type="html"><![CDATA[<p>在此前的博客中，使用的一直是预定义好的固定颜色或者纹理来渲染图形的。接下来，将进一步改造片段着色器部分，为其添加光照效果。</p>
+<h2 id="颜色的构成">颜色的构成</h2>
+<p>在现实生活中看到某一物体的颜色并不是这个物体真正拥有的颜色，而是它所反射的颜色。换句话说，那些不能被物体所吸收的颜色才是我们能够感知到的物体的颜色。例如，如果我们将白光照在一个蓝色的玩具上，这个蓝色的玩具会吸收白光中除了蓝色以外的所有子颜色，不被吸收的蓝色光被反射到眼中，让这个玩具看起来是蓝色的。</p>
+<p>在计算机中有几种表示颜色的系统，不过一如既往的，这里使用RGB向量来表示颜色。</p>
+<p>这些颜色反射的定律被直接地运用在图形领域。在OpenGL中创建一个光源时，会给光源一个颜色。光源的颜色与物体的颜色值相乘，所得到的就是这个物体所反射的颜色（也就是我们所感知到的颜色）。</p>
+<h2 id="冯氏光照模型">冯氏光照模型</h2>
+<p>现实世界的光照是极其复杂的，而且会受到诸多因素的影响，因此OpenGL的光照使用的是简化的模型，对现实的情况进行近似，并且效果上也比较近似。其中一个模型被称为冯氏光照模型(Phong Lighting Model)。冯氏光照模型的主要结构由3个分量组成：环境(Ambient)、漫反射(Diffuse)和镜面(Specular)光照。</p>
+<ul>
+<li>环境光照：可以认为是背景光照，很小的一个亮度值。物体几乎永远不会是完全黑暗的，为了模拟这个，会使用一个环境光照常量，它永远会给物体一些颜色。</li>
+<li>漫反射光照：模拟光源对物体的方向性影响，它是冯氏光照模型中视觉上最显著的分量。物体的某一部分越是正对着光源，它就会越亮。</li>
+<li>镜面光照：模拟有光泽物体上面出现的亮点。镜面光照的颜色相比于物体的颜色会更倾向于光的颜色。</li>
+</ul>
+<h3 id="环境光照">环境光照</h3>
+<p>环境光照的实现非常简单，直接通过一个环境光照因子乘上光的颜色即可</p>
+<p>这里使用一个很小的常量（光照）颜色，添加到物体片段的最终颜色中，这样子的话即便场景中没有直接的光源也能看起来存在有一些发散的光。</p>
+<p>在片段着色器中对颜色进行简单的额外处理即可。注意，要将光的颜色和物体颜色通过<code>uniform</code>传进去。为了简单起见，这里使用的是白光光源，即颜色向量为(1.0f, 1.0f, 1.0f)。</p>
+<pre><code class="language-GLSL">......
+uniform vec3 objectColor;
+uniform vec3 lightColor;
+
+void main()
+{
+    float ambientStrength = 0.1;
+    vec3 ambient = ambientStrength * lightColor;
+
+    vec3 result = ambient * objectColor;
+    FragColor = vec4(result, 1.0);
+}
+</code></pre>
+<h3 id="漫反射光照">漫反射光照</h3>
+<p>环境光照本身提供的只是很微弱的影响，但是漫反射光照就能开始对物体产生显著的视觉影响了。漫反射光照使物体上与光线方向越接近的片段能从光源处获得更多的亮度。</p>
+<p>为了计算漫反射光照，需要测量这个光线是以什么角度接触到这个片段的。如果光线垂直于物体表面，这束光对物体的影响会最大化（也就是更亮）。而为了测量光线和片段的角度，需要使用一个叫做<strong>法向量</strong>的东西，它是垂直于片段表面的一个向量。当两个向量的夹角为90度的时候，点乘会变为0。这同样适用于θ，θ越大，光对片段颜色的影响就应该越小。</p>
+<p>注意，为了（只）得到两个向量夹角的余弦值，使用的是单位向量（长度为1的向量），所以需要确保所有的向量都是标准化的，否则点乘返回的就不仅仅是余弦值了。</p>
+<p>具体而言，计算漫反射光照需要法向量和光线方向。将这两个向量进行点乘，用于计算光源对当前片段实际的漫反射影响。结果值再乘以光的颜色，就得到了漫反射分量。</p>
+<ul>
+<li>法向量：一个垂直于顶点表面的向量。</li>
+<li>光线方向：作为光源的位置与片段的位置之间向量差的方向向量。为了计算这个光线，需要光的位置向量和片段的位置向量，对其进行相减即可。</li>
+</ul>
+<p>简单起见，由于使用的是正方体，这里将法线向量直接定义在顶点属性中。更改顶点数组，并设置对应的uniform。</p>
+<pre><code class="language-c++">float vertices[] = {
+    -0.5f, -0.5f, -0.5f,  0.0f,  0.0f, -1.0f,
+     0.5f, -0.5f, -0.5f,  0.0f,  0.0f, -1.0f,
+     0.5f,  0.5f, -0.5f,  0.0f,  0.0f, -1.0f,
+     0.5f,  0.5f, -0.5f,  0.0f,  0.0f, -1.0f,
+    -0.5f,  0.5f, -0.5f,  0.0f,  0.0f, -1.0f,
+    -0.5f, -0.5f, -0.5f,  0.0f,  0.0f, -1.0f,
+
+    -0.5f, -0.5f,  0.5f,  0.0f,  0.0f, 1.0f,
+     0.5f, -0.5f,  0.5f,  0.0f,  0.0f, 1.0f,
+     0.5f,  0.5f,  0.5f,  0.0f,  0.0f, 1.0f,
+     0.5f,  0.5f,  0.5f,  0.0f,  0.0f, 1.0f,
+    -0.5f,  0.5f,  0.5f,  0.0f,  0.0f, 1.0f,
+    -0.5f, -0.5f,  0.5f,  0.0f,  0.0f, 1.0f,
+
+    -0.5f,  0.5f,  0.5f, -1.0f,  0.0f,  0.0f,
+    -0.5f,  0.5f, -0.5f, -1.0f,  0.0f,  0.0f,
+    -0.5f, -0.5f, -0.5f, -1.0f,  0.0f,  0.0f,
+    -0.5f, -0.5f, -0.5f, -1.0f,  0.0f,  0.0f,
+    -0.5f, -0.5f,  0.5f, -1.0f,  0.0f,  0.0f,
+    -0.5f,  0.5f,  0.5f, -1.0f,  0.0f,  0.0f,
+
+     0.5f,  0.5f,  0.5f,  1.0f,  0.0f,  0.0f,
+     0.5f,  0.5f, -0.5f,  1.0f,  0.0f,  0.0f,
+     0.5f, -0.5f, -0.5f,  1.0f,  0.0f,  0.0f,
+     0.5f, -0.5f, -0.5f,  1.0f,  0.0f,  0.0f,
+     0.5f, -0.5f,  0.5f,  1.0f,  0.0f,  0.0f,
+     0.5f,  0.5f,  0.5f,  1.0f,  0.0f,  0.0f,
+
+    -0.5f, -0.5f, -0.5f,  0.0f, -1.0f,  0.0f,
+     0.5f, -0.5f, -0.5f,  0.0f, -1.0f,  0.0f,
+     0.5f, -0.5f,  0.5f,  0.0f, -1.0f,  0.0f,
+     0.5f, -0.5f,  0.5f,  0.0f, -1.0f,  0.0f,
+    -0.5f, -0.5f,  0.5f,  0.0f, -1.0f,  0.0f,
+    -0.5f, -0.5f, -0.5f,  0.0f, -1.0f,  0.0f,
+
+    -0.5f,  0.5f, -0.5f,  0.0f,  1.0f,  0.0f,
+     0.5f,  0.5f, -0.5f,  0.0f,  1.0f,  0.0f,
+     0.5f,  0.5f,  0.5f,  0.0f,  1.0f,  0.0f,
+     0.5f,  0.5f,  0.5f,  0.0f,  1.0f,  0.0f,
+    -0.5f,  0.5f,  0.5f,  0.0f,  1.0f,  0.0f,
+    -0.5f,  0.5f, -0.5f,  0.0f,  1.0f,  0.0f
+};
+
+glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float), (void*)0);
+glEnableVertexAttribArray(0);
+glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float), (void*)(3*sizeof(float)));
+glEnableVertexAttribArray(1);
+</code></pre>
+<p>然后更改顶点着色器和片段着色器：</p>
+<pre><code class="language-GLSL">#shader vertex
+#version 330 core
+layout (location = 0) in vec3 aPos;
+layout (location = 1) in vec3 aNormal;
+out vec3 Normal;
+out vec3 FragPos;  
+
+uniform mat4 model;
+uniform mat4 view;
+uniform mat4 projection;
+
+void main()
+{
+    gl_Position = projection * view * model * vec4(aPos, 1.0);
+    Normal = mat3(transpose(inverse(view * model))) * aNormal;
+    FragPos = vec3(view * model * vec4(aPos, 1.0));
+}
+
+#shader fragment
+#version 330 core
+
+in vec3 FragPos;
+in vec3 Normal;
+
+uniform vec3 objectColor;
+uniform vec3 lightColor;
+
+void main()
+{
+    float ambientStrength = 0.1;
+    vec3 ambient = ambientStrength * lightColor;
+
+    vec3 norm = normalize(Normal);
+    vec3 lightDir = normalize(lightPos - FragPos);
+
+    float diff = max(dot(norm, lightDir), 0.0);
+    vec3 diffuse = diff * lightColor;
+
+    vec3 result = (ambient + diffuse) * objectColor;
+    FragColor = vec4(result, 1.0);
+}
+</code></pre>
+<p>首先，一般而言，都是在观察空间进行光照计算。观察空间计算的优势是，观察者的位置总是在(0, 0, 0)，所以已经零成本地拿到了观察者的位置。所以需要需要将所有相关的向量也用观察矩阵进行变换（不要忘记也修改法线矩阵），即全部乘上<code>view</code>矩阵（当然，在此之前需要先变换到世界矩阵，即乘<code>model</code>矩阵）。</p>
+<p>法向量只是一个方向向量，不能表达空间中的特定位置。同时，法向量没有齐次坐标（顶点位置中的<code>w</code>分量）。这意味着，位移不应该影响到法向量。对于法向量，只希望对它实施缩放和旋转变换。</p>
+<p>如果模型矩阵执行了不等比缩放，顶点的改变会导致法向量不再垂直于表面了。因此，不能直接用模型矩阵来变换法向量。每当应用一个不等比缩放时（注意：等比缩放不会破坏法线，因为法线的方向没被改变，仅仅改变了法线的长度，而这很容易通过标准化来修复），法向量就不会再垂直于对应的表面了，这样光照就会被破坏。</p>
+<p>因此，需要使用专门的法线矩阵，它通过一些线性代数的操作移除了对法向量错误缩放的影响。</p>
+<p>在顶点着色器中，可以使用<code>inverse</code>和<code>transpose</code>函数自己生成这个法线矩阵。注意还要把被处理过的矩阵强制转换为3×3矩阵，来保证它失去了位移属性以及能够乘以<code>vec3</code>的法向量。</p>
+<p>因为计算需要一个顶点位置，可以通过把顶点位置属性乘以模型矩阵（不是观察和投影矩阵）来把它变换到世界空间坐标，接着再变换到观察空间。将这个坐标输出到片段着色器中。</p>
+<p>在片段着色器中，需要做的第一件事是计算光源和片段位置之间的方向向量。光的方向向量是光源位置向量与片段位置向量之间的向量差。为了确保所有相关向量最后都转换为单位向量，所以把法线和最终的方向向量都进行了标准化。</p>
+<p>接着，对norm和lightDir向量进行点乘，计算光源对当前片段实际的漫反射影响。结果值再乘以光的颜色，得到漫反射分量。</p>
+<p>最后把这个值加到结果上即可。</p>
+<h3 id="镜面光照">镜面光照</h3>
+<p>和漫反射光照一样，镜面光照也决定于光的方向向量和物体的法向量，但是它也决定于观察方向，例如玩家是从什么方向看向这个片段的。镜面光照决定于表面的反射特性。如果把物体表面设想为一面镜子，那么镜面光照最强的地方就是看到表面上反射光的地方。</p>
+<p>可以通过根据法向量翻折入射光的方向来计算反射向量。然后计算反射向量与观察方向的角度差，它们之间夹角越小，镜面光的作用就越大。由此产生的效果就是，在看向在入射光在表面的反射方向时，会看到一点高光。</p>
+<p>观察向量是计算镜面光照时需要的一个额外变量，可以使用观察者的位置和片段的位置来计算它，将其直接相减即可。</p>
+<p>由于之前已经变换到观察空间进行光照计算，因此，观察者的坐标直接为(0,0,0)。</p>
+<p>对应的，在片段着色器中添加代码计算镜面光照。</p>
+<pre><code class="language-GLSL">float specularStrength = 0.5;
+vec3 viewDir = normalize(-FragPos);
+vec3 reflectDir = reflect(-lightDir, norm);
+float spec = pow(max(dot(viewDir, reflectDir), 0.0), 32);
+vec3 specular = specularStrength * spec * lightColor;
+
+vec3 result = (ambient + diffuse + specular) * objectColor;
+FragColor = vec4(result, 1.0);
+</code></pre>
+<p><code>specularStrength</code>代表镜面强度，这里给镜面高光一个中等亮度颜色，让它不要产生过度的影响。</p>
+<p>下一步，计算视线方向向量，和对应的沿着法线轴的反射向量。需要注意的是这里对<code>lightDir</code>向量进行了取反。<code>reflect</code>函数要求第一个向量是从光源指向片段位置的向量，但是<code>lightDir</code>当前正好相反，是从片段指向光源的，所以需要取反。第二个参数要求是一个法向量，所以提供的是已标准化的<code>norm</code>向量。</p>
+<p>最后，计算镜面反射分量并加到最终结果中。先计算视线方向与反射方向的点乘，并确保它不是负值，然后取它的32次幂。这个32是高光的反光度(Shininess)。一个物体的反光度越高，反射光的能力越强，散射得越少，高光点就会越小，并且越亮。</p>
+<h2 id="最终效果">最终效果</h2>
+<p>首先，创建一个光源，为了方便起见，直接使用立方体作为光源，然后将其创建在原立方体的上方位置。</p>
+<pre><code class="language-c++">glm::vec3 lightPos(1.2f, 1.0f, 2.0f);
+
+glm::mat4 lightmodel;
+lightmodel = glm::mat4();
+lightmodel = glm::translate(lightmodel, lightPos);
+lightmodel = glm::scale(lightmodel, glm::vec3(0.2f));
+
+unsigned int VBO, VAO, lightVAO;
+glGenVertexArrays(1, &amp;lightVAO);
+glBindVertexArray(lightVAO);
+glBindBuffer(GL_ARRAY_BUFFER, VBO);
+glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
+glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float), (void*)0);
+glEnableVertexAttribArray(0);
+</code></pre>
+<p>注意，还需在game循环中绑定并绘制光源：</p>
+<pre><code class="language-c++">glBindVertexArray(lightVAO);
+glDrawArrays(GL_TRIANGLES, 0, 36);
+</code></pre>
+<p>简单的对图形的model矩阵进行改动，使其不断移动从而方便观察光照效果。</p>
+<p>最终效果如下：<br>
+<img src="https://wjcsw.github.io/post-images/1693212974713.gif" alt="" loading="lazy"></p>
+<h2 id="参考资料">参考资料</h2>
+<p>[1] https://learnopengl-cn.readthedocs.io/zh/latest/01%20Getting%20started/03%20Hello%20Window/</p>
+]]></content>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[[OpenGL入门教程] 9. 摄像机类]]></title>
+        <id>https://wjcsw.github.io/oE7B7ZmLi/</id>
+        <link href="https://wjcsw.github.io/oE7B7ZmLi/">
+        </link>
+        <updated>2023-08-23T14:02:35.000Z</updated>
+        <content type="html"><![CDATA[<p>在上一篇博客中提到了观察空间的概念，这是以摄像机的视角作为场景原点时场景中所有的顶点坐标：观察矩阵把所有的世界坐标变换为相对于摄像机位置与方向的观察坐标。</p>
+<p>为了移动摄像机的位置，我们是采取将整个场景按照反方向移动的办法。这样的方法比较简化，但是不太直观，并且如果我们想要更加精确的控制摄像机的位置，需要大量的设置。因此，可以将摄像机部分封装成一个类来进行控制。</p>
+<h2 id="摄像机坐标系">摄像机坐标系</h2>
+<p>要定义一个摄像机，需要它在世界空间中的位置、观察的方向、一个指向它右侧的向量以及一个指向它上方的向量。这实际上创建了一个三个单位轴相互垂直的、以摄像机的位置为原点的坐标系。</p>
+<p>摄像机位置很简单，就是希望摄像机处于的位置，用一个向量表示坐标即可。</p>
+<p>摄像机的方向指的是摄像机指向哪个方向。假设让摄像机指向场景原点：<code>(0, 0, 0)</code>，那么用场景原点向量减去摄像机位置向量的结果就是摄像机的指向向量。注意，方向向量与摄像机实际指向的方向是正好相反的，因为是让场景方向移动来使产生移动摄像机的效果。</p>
+<p>右向量代表摄像机空间的x轴的正方向。为获取右向量需要先使用一个小技巧：先定义一个上向量。接下来把上向量和第二步得到的方向向量进行叉乘。两个向量叉乘的结果会同时垂直于两向量，因此会得到指向x轴正方向的那个向量（如果我们交换两个向量叉乘的顺序就会得到相反的指向x轴负方向的向量）</p>
+<p>最后把右向量和方向向量进行叉乘获取一个指向摄像机的正y轴向量。使用这些摄像机向量就可以使用<code>glm::lookAt</code>创建一个<code>view</code>矩阵。</p>
+<pre><code class="language-c++">glm::vec3 cameraPos   = glm::vec3(0.0f, 0.0f,  3.0f);
+glm::vec3 cameraFront = glm::vec3(0.0f, 0.0f, -1.0f);
+glm::vec3 cameraUp    = glm::vec3(0.0f, 1.0f,  0.0f);
+
+view = glm::lookAt(cameraPos, cameraPos + cameraFront, cameraUp);
+</code></pre>
+<p><code>cameraPos</code>是摄像机位置，<code>cameraFront</code>表示方向向量， <code>cameraUp</code>表示向上的向量。</p>
+<p><code>glm::LookAt</code>函数需要一个位置、目标和上向量。目标是当前的位置加上我们刚刚定义的方向向量。这样能保证无论怎么移动，摄像机都会注视着目标方向。</p>
+<h2 id="摄像机移动">摄像机移动</h2>
+<p>在上面定义的基础上，通过键盘输入来改变这些向量，就可以实现移动摄像机的效果了。</p>
+<pre><code class="language-c++">void processInput(GLFWwindow *window)
+{
+    if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS)
+    glfwSetWindowShouldClose(window, true);
+
+    float cameraSpeed =  2.5f * deltaTime; // adjust accordingly
+    if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS)
+        cameraPos += cameraSpeed * cameraFront;
+    if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS)
+        cameraPos -= cameraSpeed * cameraFront;
+    if (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS)
+        cameraPos -= glm::normalize(glm::cross(cameraFront, cameraUp)) * cameraSpeed;
+    if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS)
+        cameraPos += glm::normalize(glm::cross(cameraFront, cameraUp)) * cameraSpeed;
+}
+</code></pre>
+<p>由于每个电脑性能不同，会导致有些人可能会比其他人每秒绘制更多帧，也就是以更高的频率调用<code>processInput</code>函数。结果就是，根据配置的不同，有些人可能移动很快，而有些人会移动很慢。</p>
+<p>为了保证程序在所有硬件上移动速度都一样，这里使用渲染时间来作为移动速度的基准。图形程序和游戏通常会跟踪一个时间差(Deltatime)变量，它储存了渲染上一帧所用的时间。</p>
+<p>这里将所有速度都去乘以<code>deltaTime</code>值。如果<code>deltaTime</code>很大，就意味着上一帧的渲染花费了更多时间，所以这一帧的速度需要变得更高来平衡渲染所花去的时间。使用这种方法时，无论你的电脑快还是慢，摄像机的速度都会相应平衡，这样每个用户的体验就都一样了。</p>
+<p>可以通过两个全局变量<code>deltaTime</code>和<code>lastFrame</code>实现计算<code>deltaTime</code>值，在循环中调用如下代码，每次记录并保存deltaTime。</p>
+<pre><code class="language-c++">float currentFrame = glfwGetTime();
+deltaTime = currentFrame - lastFrame;
+lastFrame = currentFrame;
+</code></pre>
+<p>在处理键盘函数中，当按下WASD键的任意一个，摄像机的位置都会相应更新。</p>
+<p>如果向前或向后移动，就把位置向量加上或减去方向向量。</p>
+<p>如果向左右移动，使用叉乘来创建一个右向量，并沿着它相应移动就可以了。这里对右向量进行了标准化。如果没对这个向量进行标准化，最后的叉乘结果会根据<code>cameraFront</code>变量返回大小不同的向量。这样就得根据摄像机的朝向不同加速或减速移动了，但如果进行了标准化移动就是匀速的。</p>
+<p>注意，为了使得这个函数发挥作用，应当在game循环中主动调用它。</p>
+<h2 id="摄像机旋转">摄像机旋转</h2>
+<p>为了能够改变视角，需要根据鼠标的输入改变cameraFront向量。这里，使用欧拉角来表示三维空间中的角度。</p>
+<p>欧拉角(Euler Angle)是可以表示3D空间中任何旋转的3个值，由莱昂哈德·欧拉(Leonhard Euler)在18世纪提出。一共有3种欧拉角：俯仰角(Pitch)、偏航角(Yaw)和滚转角(Roll)。每个欧拉角都有一个值来表示，把三个角结合起来就能够计算3D空间中任何的旋转向量。</p>
+<p>俯仰角是描述如何往上或往下看的角，偏航角表示往左和往右看的程度，滚转角代表如何翻滚摄像机。在这里，只使用俯仰角和偏航角，不去考虑反转。</p>
+<p>这两个角的计算并不复杂，这里不去介绍其数学知识，直接给出计算公式：</p>
+<pre><code class="language-c++">front.x = cos(glm::radians(pitch)) * cos(glm::radians(yaw)); 
+front.y = sin(glm::radians(pitch));
+front.z = cos(glm::radians(pitch)) * sin(glm::radians(yaw));
+</code></pre>
+<p>接着，通过鼠标（或手柄）移动获得这两个角度，水平的移动影响偏航角，竖直的移动影响俯仰角。原理很简单，储存上一帧鼠标的位置，在当前帧中我们当前计算鼠标位置与上一帧的位置相差多少。如果水平/竖直差别越大那么俯仰角或偏航角就改变越大，也就是摄像机需要移动更多的距离。</p>
+<p>首先，通过<code>glfwSetInputMode</code>设置隐藏并捕捉光标位置。接着注册鼠标移动的回调函数，在这个函数中负责处理计算欧拉角并改变cameraFront向量。</p>
+<pre><code class="language-c++">glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+glfwSetCursorPosCallback(window, mouse_callback);
+
+void mouse_callback(GLFWwindow* window, double xpos, double ypos){
+    if(firstMouse)
+    {
+        lastX = xpos;
+        lastY = ypos;
+        firstMouse = false;
+    }
+
+    float xoffset = xpos - lastX;
+    float yoffset = lastY - ypos; 
+    lastX = xpos;
+    lastY = ypos;
+
+    float sensitivity = 0.05;
+    xoffset *= sensitivity;
+    yoffset *= sensitivity;
+
+    yaw   += xoffset;
+    pitch += yoffset;
+
+    if(pitch &gt; 89.0f)
+        pitch = 89.0f;
+    if(pitch &lt; -89.0f)
+        pitch = -89.0f;
+
+    glm::vec3 front;
+    front.x = cos(glm::radians(yaw)) * cos(glm::radians(pitch));
+    front.y = sin(glm::radians(pitch));
+    front.z = sin(glm::radians(yaw)) * cos(glm::radians(pitch));
+    cameraFront = glm::normalize(front);
+}
+</code></pre>
+<p>这里使用了两个全局变量<code>lastX</code>和<code>lastY</code>来记录在程序中储存上一帧的鼠标位置。</p>
+<p>鼠标移动回调函数中，首先判断是否是第一次调用，获取初始位置。</p>
+<p>接着通过获取的鼠标位移来计算偏移角度，由于鼠标位移对应到角度中的值太大了，转向速度过快，因此为其添加一个灵敏度用于控制。</p>
+<p>最后改变欧拉角并使用改变后的欧拉角计算新的<code>cameraFront</code>向量。</p>
+<p>注意，由于俯仰角在90度时视角会发生逆转，这里对其限制为-89到89的范围。这样能够保证用户只能看到天空或脚下，但是不能超越这个限制。</p>
+<h2 id="摄像机缩放">摄像机缩放</h2>
+<p>在之前的例子中介绍过视野或<code>fov</code>定义了可以看到场景中多大的范围。当视野变小时，场景投影出来的空间就会减小，产生放大了的感觉。</p>
+<p>这里，按照一般使用鼠标滚轮来控制缩放。同样的，需要定义一个鼠标滚轮的回调函数。</p>
+<pre><code class="language-c++">glfwSetScrollCallback(window, scroll_callback);
+
+void scroll_callback(GLFWwindow* window, double xoffset, double yoffset)
+{
+  if(fov &gt;= 1.0f &amp;&amp; fov &lt;= 90.0f)
+    fov -= yoffset;
+  if(fov &lt;= 1.0f)
+    fov = 1.0f;
+  if(fov &gt;= 90.0f)
+    fov = 90.0f;
+}
+</code></pre>
+<p>首先，注册下鼠标滚轮的回调函数。</p>
+<p>这里使用一个全局变量<code>fov</code>来记录视野范围。</p>
+<p>当滚动鼠标滚轮的时候，<code>yoffset</code>值代表竖直滚动的大小。当<code>scroll_callback</code>函数被调用后，改变全局变量<code>fov</code>变量的内容。限制下缩放的范围以保证显示效果。</p>
+<p>相应的，在循环中设置每一帧的project矩阵：</p>
+<pre><code class="language-c++">projection = glm::perspective(glm::radians(fov), 800.0f / 600.0f, 0.1f, 100.0f);
+</code></pre>
+<p>到这里，已经实现了所有的摄像机操作，获得了一个类似fps游戏中的摄像机了。</p>
+<h2 id="封装成摄像机类">封装成摄像机类</h2>
+<p>基本上而言，就是将上述的操作都抽象成接口，并将需要的数据定义成成员变量。</p>
+<pre><code class="language-c++">// Camera.h
+#pragma once
+
+#include &lt;glm/glm.hpp&gt;
+#include &lt;glm/gtc/matrix_transform.hpp&gt;
+#include &lt;glm/gtc/type_ptr.hpp&gt;
+
+#include &lt;vector&gt;
+
+enum Camera_Movement {
+    FORWARD,
+    BACKWARD,
+    LEFT,
+    RIGHT
+};
+// Default camera values
+const float YAW = -90.0f;
+const float PITCH = 0.0f;
+const float SPEED = 5.5f;
+const float SENSITIVITY = 0.1f;
+const float ZOOM = 45.0f;
+
+class Camera
+{
+private:
+    glm::vec3 Position;
+    glm::vec3 Front;
+    glm::vec3 Up;
+    glm::vec3 Right;
+    glm::vec3 WorldUp;
+
+    // euler Angles
+    float Yaw;
+    float Pitch;
+    // camera options
+    float MovementSpeed;
+    float MouseSensitivity;
+    float Zoom;
+
+    // calculates the front vector from the Camera's (updated) Euler Angles
+    void updateCameraVectors();
+
+public:
+
+    Camera(glm::vec3 position = glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3 up = glm::vec3(0.0f, 1.0f, 0.0f), float yaw = YAW, float pitch = PITCH) : Front(glm::vec3(0.0f, 0.0f, -1.0f)), MovementSpeed(SPEED), MouseSensitivity(SENSITIVITY), Zoom(ZOOM)
+    {
+        Position = position;
+        WorldUp = up;
+        Yaw = yaw;
+        Pitch = pitch;
+        updateCameraVectors();
+    }
+    // constructor with scalar values
+    Camera(float posX, float posY, float posZ, float upX, float upY, float upZ, float yaw, float pitch) : Front(glm::vec3(0.0f, 0.0f, -1.0f)), MovementSpeed(SPEED), MouseSensitivity(SENSITIVITY), Zoom(ZOOM)
+    {
+        Position = glm::vec3(posX, posY, posZ);
+        WorldUp = glm::vec3(upX, upY, upZ);
+        Yaw = yaw;
+        Pitch = pitch;
+        updateCameraVectors();
+    }
+
+    glm::mat4 GetViewMatrix();
+
+    float Getzoom();
+
+    void ProcessKeyboard(Camera_Movement direction, float deltaTime);
+    
+    void ProcessMouseMovement(float xoffset, float yoffset);
+
+    void ProcessMouseScroll(float yoffset);
+  
+};
+
+
+// Camera.cpp
+#include &quot;Camera.h&quot;
+
+void Camera::updateCameraVectors()
+{
+    // calculate the new Front vector
+    glm::vec3 front;
+    front.x = cos(glm::radians(Yaw)) * cos(glm::radians(Pitch));
+    front.y = sin(glm::radians(Pitch));
+    front.z = sin(glm::radians(Yaw)) * cos(glm::radians(Pitch));
+    Front = glm::normalize(front);
+    // also re-calculate the Right and Up vector
+    Right = glm::normalize(glm::cross(Front, WorldUp));  // normalize the vectors, because their length gets closer to 0 the more you look up or down which results in slower movement.
+    Up = glm::normalize(glm::cross(Right, Front));
+}
+
+glm::mat4 Camera::GetViewMatrix()
+{
+    return glm::lookAt(Position, Position + Front, Up);
+}
+
+float Camera::Getzoom()
+{
+    return Zoom;
+}
+
+void Camera::ProcessKeyboard(Camera_Movement direction, float deltaTime)
+{
+    float velocity = MovementSpeed * deltaTime;
+    if (direction == FORWARD)
+        Position += Front * velocity;
+    if (direction == BACKWARD)
+        Position -= Front * velocity;
+    if (direction == LEFT)
+        Position -= Right * velocity;
+    if (direction == RIGHT)
+        Position += Right * velocity;
+}
+
+void Camera::ProcessMouseMovement(float xoffset, float yoffset)
+{
+    xoffset *= MouseSensitivity;
+    yoffset *= MouseSensitivity;
+
+    Yaw += xoffset;
+    Pitch += yoffset;
+
+    if (Pitch &gt; 89.0f)
+        Pitch = 89.0f;
+    if (Pitch &lt; -89.0f)
+        Pitch = -89.0f;
+
+    // update Front, Right and Up Vectors using the updated Euler angles
+    updateCameraVectors();
+}
+
+void Camera::ProcessMouseScroll(float yoffset)
+{
+    Zoom -= (float)yoffset;
+    if (Zoom &lt; 1.0f)
+        Zoom = 1.0f;
+    if (Zoom &gt; 90.0f)
+        Zoom = 90.0f;
+}
+
+</code></pre>
+<p>最终效果如下：<br>
+<img src="https://wjcsw.github.io/post-images/1693144963237.gif" alt="" loading="lazy"></p>
+<h2 id="参考资料">参考资料</h2>
+<p>[1] https://learnopengl-cn.readthedocs.io/zh/latest/01%20Getting%20started/03%20Hello%20Window/</p>
+<p>[2] http://bit.ly/2lt7ccM</p>
+]]></content>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[[OpenGL入门教程] 8. 3D空间]]></title>
+        <id>https://wjcsw.github.io/UQl_wdfkZ/</id>
+        <link href="https://wjcsw.github.io/UQl_wdfkZ/">
+        </link>
+        <updated>2023-08-21T11:55:34.000Z</updated>
+        <content type="html"><![CDATA[<p>为了简化考虑，此前的图形都是2D的，现在我们要准备进入3D空间了。</p>
+<p>但是，在此之前，需要梳理下关于坐标空间的知识。</p>
+<h2 id="坐标空间">坐标空间</h2>
+<p>将坐标变换为标准化设备坐标，接着再转化为屏幕坐标的过程通常是分步进行的。物体的顶点在最终转化为屏幕坐标之前还会被变换到多个坐标系统。将物体的坐标变换到几个过渡坐标系的优点在于，在这些特定的坐标系统中，一些操作或运算更加方便和容易。比较重要的总共有5个不同的坐标系统：</p>
+<ul>
+<li>局部空间(或者称为物体空间)</li>
+<li>世界空间</li>
+<li>观察空间(或者称为视觉空间)</li>
+<li>裁剪空间</li>
+<li>屏幕空间<br>
+这就是一个顶点在最终被转化为片段之前需要经历的所有不同状态。</li>
+</ul>
+<p>之所以将顶点变换到各个不同的空间的原因是有些操作在特定的坐标系统中才有意义且更方便。例如，当需要对物体进行修改的时候，在局部空间中来操作会更说得通；如果要对一个物体做出一个相对于其它物体位置的操作时，在世界坐标系中来做这个才更说得通，等等。</p>
+<p>最开始，顶点坐标位于<strong>局部空间</strong>，在这里它称为<strong>局部坐标</strong>，接着它会变为<strong>世界坐标</strong>，<strong>观察坐标</strong>，<strong>裁剪坐标</strong>，并最后以<strong>屏幕坐标</strong>的形式结束：</p>
+<ol>
+<li>局部坐标是对象相对于局部原点的坐标，也是物体起始的坐标。</li>
+<li>下一步是将局部坐标变换为世界空间坐标，世界空间坐标是处于一个更大的空间范围的。这些坐标相对于世界的全局原点，它们会和其它物体一起相对于世界的原点进行摆放。</li>
+<li>接下来将世界坐标变换为观察空间坐标，<strong>使得每个坐标都是从摄像机或者说观察者的角度进行观察的</strong>。</li>
+<li>坐标到达观察空间之后，需要将其投影到裁剪坐标。<strong>裁剪坐标会被处理至-1.0到1.0的范围内，并判断哪些顶点将会出现在屏幕上</strong>。</li>
+<li>最后，将裁剪坐标变换为屏幕坐标，这一步使用一个叫做<strong>视口变换</strong>的过程。视口变换将位于-1.0到1.0范围的坐标变换到由<code>glViewport</code>函数所定义的坐标范围内。最后变换出来的坐标将会送到光栅器，将其转化为片段。</li>
+</ol>
+<p>而为了将坐标从一个坐标系变换到另一个坐标系，需要用到几个变换矩阵，最重要的几个分别是：<strong>模型矩阵</strong>、<strong>观察矩阵</strong>以及<strong>投影矩阵</strong>。从<strong>局部坐标到世界坐标</strong>，通过<strong>模型矩阵</strong>变换；从<strong>世界坐标到观察坐标</strong>，通过<strong>观察矩阵</strong>变换；从<strong>观察坐标到裁剪坐标</strong>，通过<strong>投影矩阵</strong>变换。</p>
+<h3 id="局部坐标">局部坐标</h3>
+<p>局部空间是指物体所在的坐标空间，即对象最开始所在的地方。你模型的所有顶点都是在局部空间中：它们相对于你的物体来说都是局部的。</p>
+<p>之前的例子中，一直使用的三角形的顶点是被设定在-0.5到0.5的坐标范围中，(0, 0)是它的原点。这些都是局部坐标。</p>
+<h3 id="世界空间">世界空间</h3>
+<p>世界空间中的坐标正如其名：是指顶点相对于（游戏）世界的坐标。表示的是模型与模型之间的位置关系。该变换是由模型矩阵实现的。</p>
+<p>模型矩阵是一种变换矩阵，它能通过对物体进行位移、缩放、旋转来将它置于它本应该在的位置或朝向。</p>
+<p>可以将上一篇博客中最后使用的那个变换看作是一种模型矩阵。</p>
+<h3 id="观察空间">观察空间</h3>
+<p>观察空间是将世界空间坐标转化为用户视野前方的坐标而产生的结果。</p>
+<p>因此观察空间就是从摄像机的视角所观察到的空间。而这通常是由一系列的位移和旋转的组合来完成，平移/旋转场景从而使得特定的对象被变换到摄像机的前方。</p>
+<p>这些组合在一起的变换通常存储在一个观察矩阵里，它被用来将世界坐标变换到观察空间。</p>
+<h3 id="裁剪空间">裁剪空间</h3>
+<p>在一个顶点着色器运行的最后，OpenGL期望所有的坐标都能落在一个特定的范围内，且任何在这个范围之外的点都应该被裁剪掉(Clipped)。被裁剪掉的坐标就会被忽略，所以剩下的坐标就将变为屏幕上可见的片段。</p>
+<p>因为将所有可见的坐标都指定在-1.0到1.0的范围内不是很直观，所以正常来说会指定自己的坐标集并将它变换回标准化设备坐标系。</p>
+<p>为了将顶点坐标从观察变换到裁剪空间，需要定义一个投影矩阵，它指定了一个范围的坐标，比如在每个维度上的-1000到1000。投影矩阵接着会将在这个指定的范围内的坐标变换为标准化设备坐标的范围(-1.0, 1.0)。所有在范围外的坐标不会被映射到在-1.0到1.0的范围之间，所以会被裁剪掉。</p>
+<p>注意，如果只是图元（例如三角形）的一部分超出了裁剪体积，则OpenGL会重新构建这个三角形为一个或多个三角形让其能够适合这个裁剪范围。</p>
+<p>由投影矩阵创建的观察箱被称为平截头体，每个出现在平截头体范围内的坐标都会最终出现在用户的屏幕上。将特定范围内的坐标转化到标准化设备坐标系的过程（而且它很容易被映射到2D观察空间坐标）被称之为投影，因为使用投影矩阵能将3D坐标投影到很容易映射到2D的标准化设备坐标系中。</p>
+<p>一旦所有顶点被变换到裁剪空间，最终的操作——<strong>透视除法</strong>将会执行，在这个过程中将位置向量的x，y，z分量分别除以向量的齐次w分量；<strong>透视除法是将4D裁剪空间坐标变换为3D标准化设备坐标的过程</strong>。这一步会<strong>在每一个顶点着色器运行的最后被自动执行</strong>。</p>
+<h4 id="正射投影">正射投影</h4>
+<p>正射投影矩阵定义了一个类似立方体的平截头箱，它定义了一个裁剪空间，在这空间之外的顶点都会被裁剪掉。创建一个正射投影矩阵需要指定可见平截头体的宽、高和长度。</p>
+<p>在使用正射投影矩阵变换至裁剪空间之后处于这个平截头体内的所有坐标将不会被裁剪掉。</p>
+<p>要创建一个正射投影矩阵，可以使用GLM的内置函数<code>glm::ortho</code>：</p>
+<pre><code class="language-c++">glm::ortho(0.0f, 800.0f, 0.0f, 600.0f, 0.1f, 100.0f);
+</code></pre>
+<p>上面的平截头体定义了可见的坐标，它由由宽、高、近平面和远平面所指定。任何出现在近平面之前或远平面之后的坐标都会被裁剪掉。</p>
+<p>正射平截头体直接将平截头体内部的所有坐标映射为标准化设备坐标，因为每个向量的w分量都没有进行改变；如果w分量等于1.0，透视除法则不会改变这个坐标。</p>
+<p>正射投影矩阵直接将坐标映射到2D平面中，即你的屏幕，但实际上一个直接的投影矩阵会产生不真实的结果，因为这个投影没有将透视(Perspective)考虑进去。所以还需要<strong>透视投影</strong>矩阵来解决这个问题。</p>
+<h4 id="透视投影">透视投影</h4>
+<p>透视投影矩阵将给定的平截头体范围映射到裁剪空间，除此之外还修改了每个顶点坐标的<code>w</code>值，从而使得离观察者越远的顶点坐标<code>w</code>分量越大。被变换到裁剪空间的坐标都会在<code>-w</code>到<code>w</code>的范围之间（任何大于这个范围的坐标都会被裁剪掉）。</p>
+<pre><code class="language-c++">glm::mat4 proj = glm::perspective(glm::radians(45.0f), (float)width/(float)height, 0.1f, 100.0f);
+</code></pre>
+<p><code>glm::perspective</code>所做的其实就是创建了一个定义了可视空间的大平截头体，任何在这个平截头体以外的东西最后都不会出现在裁剪空间体积内，并且将会受到裁剪。一个透视平截头体可以被看作一个不均匀形状的箱子，在这个箱子内部的每个坐标都会被映射到裁剪空间上的一个点。</p>
+<ul>
+<li>第一个参数定义了fov的值，它表示的是视野(Field of View)，并且设置了观察空间的大小。如果想要一个真实的观察效果，它的值通常设置为45.0f。</li>
+<li>第二个参数设置了宽高比，由视口的宽除以高所得。</li>
+<li>第三和第四个参数设置了平截头体的近和远平面。通常设置近距离为0.1f，而远距离设为100.0f。所有在近平面和远平面内且处于平截头体内的顶点都会被渲染。</li>
+</ul>
+<p>当使用正射投影时，每一个顶点坐标都会直接映射到裁剪空间中而不经过任何精细的透视除法（它仍然会进行透视除法，只是w分量没有被改变（它保持为1），因此没有起作用）。因为正射投影没有使用透视，远处的物体不会显得更小，所以产生奇怪的视觉效果。由于这个原因，正射投影主要用于二维渲染以及一些建筑或工程的程序，在这些场景中我们更希望顶点不会被透视所干扰。某些如 Blender 等进行三维建模的软件有时在建模时也会使用正射投影，因为它在各个维度下都更准确地描绘了每个物体。</p>
+<h2 id="深度测试">深度测试</h2>
+<p>OpenGL存储它的所有深度信息于一个Z缓冲中，也被称为深度缓冲。GLFW会自动为你生成这样一个缓冲（就像它也有一个颜色缓冲来存储输出图像的颜色）。</p>
+<p>深度值存储在每个片段里面（作为片段的z值），当片段想要输出它的颜色时，OpenGL会将它的深度值和z缓冲进行比较，如果当前的片段在其它片段之后，它将会被丢弃，否则将会覆盖。这个过程称为深度测试，它是由OpenGL自动完成的。</p>
+<pre><code class="language-c++">glEnable(GL_DEPTH_TEST);
+</code></pre>
+<p>可以通过glEnable函数来开启深度测试。<code>glEnable</code>和<code>glDisable</code>函数允许我们启用或禁用某个OpenGL功能。这个功能会一直保持启用/禁用状态，直到另一个调用来禁用/启用它。</p>
+<p>这里通过指定<code>GL_DEPTH_TEST</code>来开启深度测试。</p>
+<p>由于使用了深度测试，在每次渲染迭代之前也需要清除深度缓冲（否则前一帧的深度信息仍然保存在缓冲中）。就像清除颜色缓冲一样通过在glClear函数中指定<code>DEPTH_BUFFER_BIT</code>位来清除深度缓冲：</p>
+<pre><code class="language-c++">glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+</code></pre>
+<h2 id="3d绘图">3D绘图</h2>
+<p>现在，知道了如何将3D坐标变换到2D空间，就可以开始真正的3D绘图了。</p>
+<p>首先，需要先定义一个3d物体，这里就以正方体为例，也就是把之前的面扩展成体了。</p>
+<pre><code class="language-c++">float vertices[] = {
+    -0.5f, -0.5f, -0.5f,  0.0f, 0.0f,
+     0.5f, -0.5f, -0.5f,  1.0f, 0.0f,
+     0.5f,  0.5f, -0.5f,  1.0f, 1.0f,
+     0.5f,  0.5f, -0.5f,  1.0f, 1.0f,
+    -0.5f,  0.5f, -0.5f,  0.0f, 1.0f,
+    -0.5f, -0.5f, -0.5f,  0.0f, 0.0f,
+
+    -0.5f, -0.5f,  0.5f,  0.0f, 0.0f,
+     0.5f, -0.5f,  0.5f,  1.0f, 0.0f,
+     0.5f,  0.5f,  0.5f,  1.0f, 1.0f,
+     0.5f,  0.5f,  0.5f,  1.0f, 1.0f,
+    -0.5f,  0.5f,  0.5f,  0.0f, 1.0f,
+    -0.5f, -0.5f,  0.5f,  0.0f, 0.0f,
+
+    -0.5f,  0.5f,  0.5f,  1.0f, 0.0f,
+    -0.5f,  0.5f, -0.5f,  1.0f, 1.0f,
+    -0.5f, -0.5f, -0.5f,  0.0f, 1.0f,
+    -0.5f, -0.5f, -0.5f,  0.0f, 1.0f,
+    -0.5f, -0.5f,  0.5f,  0.0f, 0.0f,
+    -0.5f,  0.5f,  0.5f,  1.0f, 0.0f,
+
+     0.5f,  0.5f,  0.5f,  1.0f, 0.0f,
+     0.5f,  0.5f, -0.5f,  1.0f, 1.0f,
+     0.5f, -0.5f, -0.5f,  0.0f, 1.0f,
+     0.5f, -0.5f, -0.5f,  0.0f, 1.0f,
+     0.5f, -0.5f,  0.5f,  0.0f, 0.0f,
+     0.5f,  0.5f,  0.5f,  1.0f, 0.0f,
+
+    -0.5f, -0.5f, -0.5f,  0.0f, 1.0f,
+     0.5f, -0.5f, -0.5f,  1.0f, 1.0f,
+     0.5f, -0.5f,  0.5f,  1.0f, 0.0f,
+     0.5f, -0.5f,  0.5f,  1.0f, 0.0f,
+    -0.5f, -0.5f,  0.5f,  0.0f, 0.0f,
+    -0.5f, -0.5f, -0.5f,  0.0f, 1.0f,
+
+    -0.5f,  0.5f, -0.5f,  0.0f, 1.0f,
+     0.5f,  0.5f, -0.5f,  1.0f, 1.0f,
+     0.5f,  0.5f,  0.5f,  1.0f, 0.0f,
+     0.5f,  0.5f,  0.5f,  1.0f, 0.0f,
+    -0.5f,  0.5f,  0.5f,  0.0f, 0.0f,
+    -0.5f,  0.5f, -0.5f,  0.0f, 1.0f
+};
+</code></pre>
+<pre><code class="language-c++">glm::mat4 model;
+model = glm::rotate(model, glm::radians(-55.0f), glm::vec3(1.0f, 0.0f, 0.0f));
+
+glm::mat4 view;
+// 注意，将矩阵向要进行移动场景的反方向移动。
+view = glm::translate(view, glm::vec3(0.0f, 0.0f, -3.0f));
+
+glm::mat4 projection;
+projection = glm::perspective(glm::radians(45.0f), screenWidth / screenHeight, 0.1f, 100.0f);
+
+int Loc = glGetUniformLocation(ourShader.ID, &quot;model&quot;));
+glUniformMatrix4fv(modelLoc, 1, GL_FALSE, glm::value_ptr(model));
+Loc = glGetUniformLocation(ourShader.ID, &quot;projection&quot;));
+glUniformMatrix4fv(modelLoc, 1, GL_FALSE, glm::value_ptr(projection));
+Loc = glGetUniformLocation(ourShader.ID, &quot;view&quot;));
+glUniformMatrix4fv(modelLoc, 1, GL_FALSE, glm::value_ptr(view));
+</code></pre>
+<p>下一步创建一个模型矩阵。这个模型矩阵包含了位移、缩放与旋转操作，它们会被应用到所有物体的顶点上，以变换它们到全局的世界空间。这里定义了一个将其绕着x轴的旋转，使它看起来像放在地上一样。</p>
+<p>接下来需要创建一个观察矩阵。在场景里面稍微往后移动，以使得物体变成可见的（当在世界空间时，位于原点(0,0,0)）。将摄像机向后移动，和将整个场景向前移动是一样的。</p>
+<p>那么以相反于摄像机移动的方向移动整个场景，这就是观察矩阵所做的事。OpenGL是一个右手坐标系，所以是沿着z轴的正方向移动。这里通过将场景沿着z轴负方向平移来实现，它会给我们一种我们在往后移动的感觉。注意在标准化设备坐标系中OpenGL实际上使用的是左手坐标系（投影矩阵交换了左右手）。</p>
+<p>然后定义一个投影矩阵，这里声明了一个透视投影矩阵。</p>
+<p>接着，将定义好的变换作为uniform分别传入shader，并在shader代码中对应更改。</p>
+<pre><code class="language-GLSL">uniform mat4 model;
+uniform mat4 view;
+uniform mat4 projection;
+
+void main()
+{
+    // 注意乘法要从右向左读
+    gl_Position = projection * view * model * vec4(aPos, 1.0);
+    ...
+}
+</code></pre>
+<p>最后记得将绘图时的设置改为绘制数组，然后需要绘制36个顶点</p>
+<pre><code>glDrawArrays(GL_TRIANGLES, 0, 36);
+</code></pre>
+<p>最终效果如下：<br>
+<img src="https://wjcsw.github.io/post-images/1693050952879.gif" alt="" loading="lazy"></p>
+<h2 id="参考资料">参考资料</h2>
+<p>[1] https://learnopengl-cn.readthedocs.io/zh/latest/01%20Getting%20started/03%20Hello%20Window/</p>
+<p>[2] http://bit.ly/2lt7ccM</p>
+]]></content>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[[OpenGL入门教程] 7. 使用GLM实现变换]]></title>
+        <id>https://wjcsw.github.io/S6nVvI07/</id>
+        <link href="https://wjcsw.github.io/S6nVvI07/">
+        </link>
+        <updated>2023-08-20T08:27:42.000Z</updated>
+        <content type="html"><![CDATA[<p>注意 如果无法理解向量，矩阵以及变换的概念，请先了解下简单的线性代数，对其有所了解即可</p>
+<p>OpenGL没有自带任何的矩阵和向量知识，但是我们可以使用已经做好了的数学库，专门为OpenGL量身定做的数学库，那就是GLM。</p>
+<p>GLM是OpenGL Mathematics的缩写，它是一个只有头文件的库，只需包含对应的头文件就行了，不用链接和编译。GLM可以在它们的网站上下载。把头文件的根目录复制到你的includes文件夹，然后你就可以使用这个库了。</p>
+<p>下载链接：https://github.com/g-truc/glm/releases/tag/0.9.8.5</p>
+<h2 id="测试glm">测试GLM</h2>
+<pre><code class="language-c++">#include &lt;glm/glm.hpp&gt;
+#include &lt;glm/gtc/matrix_transform.hpp&gt;
+#include &lt;glm/gtc/type_ptr.hpp&gt;
+
+glm::vec4 vec(1.0f, 0.0f, 0.0f, 1.0f);
+// 译注：下面就是矩阵初始化的一个例子，如果使用的是0.9.9及以上版本
+// 下面这行代码就需要改为:
+// glm::mat4 trans = glm::mat4(1.0f)
+// 之后将不再进行提示
+glm::mat4 trans;
+trans = glm::translate(trans, glm::vec3(1.0f, 1.0f, 0.0f));
+vec = trans * vec;
+std::cout &lt;&lt; vec.x &lt;&lt; vec.y &lt;&lt; vec.z &lt;&lt; std::endl;
+</code></pre>
+<p>大多数需要的GLM的功能都可以从上面这3个头文件中找到</p>
+<p>这里先用GLM内建的向量类定义一个叫做<code>vec</code>的向量作为将要被位移的向量，接下来定义一个<code>mat4</code>类型的<code>trans</code>，默认是一个4×4单位矩阵。</p>
+<p>通过<code>glm::translate</code>可以创建转化矩阵，第一个参数传入单位矩阵，第二个参数传入位移的向量。这里，传入了一个(1.0,1.0,0.0)的位移。</p>
+<p>最后把向量乘以位移矩阵并且输出最后的结果。</p>
+<p>自己口算可以知道，结果应该是(2,1,0)。</p>
+<h2 id="对图形施加变化">对图形施加变化</h2>
+<pre><code class="language-c++">glm::mat4 trans;
+trans = glm::rotate(trans, glm::radians(90.0f), glm::vec3(0.0, 0.0, 1.0));
+trans = glm::scale(trans, glm::vec3(0.5, 0.5, 0.5));
+
+unsigned int transformLoc = glGetUniformLocation(ourShader.ID, &quot;transform&quot;);
+glUniformMatrix4fv(transformLoc, 1, GL_FALSE, glm::value_ptr(trans));
+</code></pre>
+<p>首先，把图形在每个轴都缩放到0.5倍，然后沿z轴旋转90度。GLM希望它的角度是弧度制的(Radian)，所以要使用<code>glm::radians</code>将角度转化为弧度。</p>
+<p>注意有纹理的那面矩形是在XY平面上的，所以需要把它绕着z轴旋转，即第三个参数。</p>
+<p>因为我们把这个矩阵传递给了GLM的每个函数，GLM会自动将矩阵相乘，返回的结果是一个包括了多个变换的变换矩阵。</p>
+<p>接着需要在主程序中添加一个uniform。首先查询uniform变量的地址，然后用有Matrix4fv后缀的glUniform函数把矩阵数据发送给着色器。</p>
+<ul>
+<li>第一个参数是uniform的位置值。</li>
+<li>第二个参数告诉OpenGL将要发送多少个矩阵，这里是1。</li>
+<li>第三个参数询问我们是否希望对传入矩阵进行转置，也就是说交换矩阵的行和列。OpenGL开发者通常使用一种内部矩阵布局，叫做列主序布局。GLM的默认布局就是列主序，所以并不需要转置矩阵，填GL_FALSE。</li>
+<li>最后一个参数是真正的矩阵数据，但是GLM并不是把它们的矩阵储存为OpenGL所希望接受的那种，因此要先用GLM的自带的函数value_ptr来变换这些数据。</li>
+</ul>
+<pre><code class="language-GLSL">#version 330 core
+layout (location = 0) in vec3 aPos;
+layout (location = 1) in vec2 aTexCoord;
+
+out vec2 TexCoord;
+
+uniform mat4 transform;
+
+void main()
+{
+    gl_Position = transform * vec4(aPos, 1.0f);
+    TexCoord = vec2(aTexCoord.x, 1.0 - aTexCoord.y);
+}
+</code></pre>
+<p>对应的，在shader代码中进行修改，引入转化矩阵，并将其左乘到坐标上。这样就可以完成一个缩放加旋转的变换了。</p>
+<p>进一步，可以在循环之中创建随时间变换的变换矩阵，从而使得图形可以旋转起来。</p>
+<pre><code class="language-c++">glm::mat4 trans;
+trans = glm::translate(trans, glm::vec3(0.5f, -0.5f, 0.0f));
+trans = glm::rotate(trans, (float)glfwGetTime(), glm::vec3(0.0f, 0.0f, 1.0f));
+</code></pre>
+<p>最终应该出现如下情况：<br>
+<img src="https://wjcsw.github.io/post-images/1693038492275.gif" alt="" loading="lazy"></p>
+<h2 id="参考资料">参考资料</h2>
+<p>[1] https://learnopengl-cn.readthedocs.io/zh/latest/01%20Getting%20started/03%20Hello%20Window/</p>
+<p>[2] http://bit.ly/2lt7ccM</p>
+]]></content>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[[OpenGL入门教程] 6. 添加纹理]]></title>
+        <id>https://wjcsw.github.io/zxSwANzNa/</id>
+        <link href="https://wjcsw.github.io/zxSwANzNa/">
+        </link>
+        <updated>2023-08-18T09:21:38.000Z</updated>
+        <content type="html"><![CDATA[<p>纹理是一个2D图片（甚至也有1D和3D的纹理），它可以用来添加物体的细节。可以理解为用一张带有图像的纸，覆盖包裹你的图形，这样你的图形看起来就有一个新的外表了。</p>
+<p>为了能够把纹理映射到图形上，需要指定图形的每个顶点各自对应纹理的哪个部分。这样每个顶点就会关联着一个纹理坐标，用来标明该从纹理图像的哪个部分采样（即采集片段颜色）。之后在图形的其它片段上进行片段插值。</p>
+<h2 id="纹理坐标">纹理坐标</h2>
+<p>纹理坐标在x和y轴上，范围为0到1之间（注意这里使用的是2D纹理图像）。使用纹理坐标获取纹理颜色叫做采样。纹理坐标起始于(0, 0)，也就是纹理图片的左下角，终始于(1, 1)，即纹理图片的右上角。</p>
+<p>纹理坐标看起来就像这样：</p>
+<pre><code class="language-c++">float texCoords[] = {
+    0.0f, 0.0f, // 左下角
+    1.0f, 0.0f, // 右下角
+    0.5f, 1.0f // 上中
+};
+</code></pre>
+<p>这里为三角形指定了3个纹理坐标点。三角形的左下角对应纹理的左下角，因此把三角形左下角顶点的纹理坐标设置为(0, 0)；三角形的上顶点对应于图片的上中位置所以把它的纹理坐标设置为(0.5, 1.0)；同理右下方的顶点设置为(1, 0)。</p>
+<p>只要给顶点着色器传递这三个纹理坐标就行了，接下来它们会被传片段着色器中，它会为每个片段进行纹理坐标的插值。</p>
+<p>对纹理采样的解释非常宽松，它可以采用几种不同的插值方式。所以还需要告诉OpenGL该怎样对纹理采样。</p>
+<h2 id="纹理环绕方式">纹理环绕方式</h2>
+<p>纹理坐标的范围通常是从(0, 0)到(1, 1)，但是如果把纹理坐标设置在范围之外会发生什么？OpenGL默认的行为是重复这个纹理图像，或者可以手动使用<code>glTexParameter*</code>函数对单独的一个坐标轴设置（s、t、r（三维情况才有）它们和x、y、z是等价的）进行设置：</p>
+<ul>
+<li><code>GL_REPEAT</code>：         重复纹理图像。这也是对纹理的默认行为。</li>
+<li><code>GL_MIRRORED_REPEAT</code>：和<code>GL_REPEAT</code>一样，但每次重复图片是镜像放置的。</li>
+<li><code>GL_CLAMP_TO_EDGE</code>：  纹理坐标会被约束在0到1之间，超出的部分会重复纹理坐标的边缘，产生一种边缘被拉伸的效果。</li>
+<li><code>GL_CLAMP_TO_BORDER</code>：超出的坐标为用户指定的边缘颜色。</li>
+</ul>
+<pre><code class="language-c++">glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_MIRRORED_REPEAT);
+glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_MIRRORED_REPEAT);
+</code></pre>
+<p><code>glTexParameter*</code>的第一个参数指定了纹理目标；这里使用的是2D纹理，因此纹理目标是<code>GL_TEXTURE_2D</code>。</p>
+<p>第二个参数需要指定设置的选项与应用的纹理轴。这里打算配置的是<code>WRAP</code>选项，并且分别指定S和T轴。</p>
+<p>最后一个参数需要传递一个环绕方式，在这个例子中OpenGL会给当前激活的纹理设定纹理环绕方式为<code>GL_MIRRORED_REPEAT</code>。</p>
+<p>如果选择<code>GL_CLAMP_TO_BORDER</code>选项，则还需要指定一个边缘的颜色。这需要使用<code>glTexParameter</code>函数的<code>fv</code>后缀形式，用<code>GL_TEXTURE_BORDER_COLOR</code>作为它的选项，并且传递一个<code>float</code>数组作为边缘的颜色值：</p>
+<pre><code class="language-c++">float borderColor[] = { 1.0f, 1.0f, 0.0f, 1.0f };
+glTexParameterfv(GL_TEXTURE_2D, GL_TEXTURE_BORDER_COLOR, borderColor);
+</code></pre>
+<h2 id="纹理过滤">纹理过滤</h2>
+<p>纹理坐标不依赖于分辨率，它可以是任意浮点值，所以OpenGL需要知道怎样将纹理像素映射到纹理坐标。所谓纹理像素指的是图片概念中的像素点，注意不要和纹理坐标搞混，纹理坐标是你给模型顶点设置的那个数组，OpenGL以这个顶点的纹理坐标数据去查找纹理图像上的像素，然后进行采样提取纹理像素的颜色。</p>
+<p>OpenGL也有对于纹理过滤的选项。纹理过滤有很多个选项，这里只介绍最重要的两种：<code>GL_NEAREST</code>和<code>GL_LINEAR</code>。</p>
+<p><code>GL_NEAREST</code>（也叫邻近过滤）是OpenGL默认的纹理过滤方式。当设置为<code>GL_NEAREST</code>的时候，OpenGL会选择中心点最接近纹理坐标的那个像素。</p>
+<p><code>GL_LINEAR</code>（也叫线性过滤）它会基于纹理坐标附近的纹理像素，计算出一个插值，近似出这些纹理像素之间的颜色。一个纹理像素的中心距离纹理坐标越近，那么这个纹理像素的颜色对最终的样本颜色的贡献越大，返回的颜色是邻近像素的混合色。</p>
+<p>在一个很大的物体上应用一张低分辨率的纹理，<code>GL_NEAREST</code>会产生颗粒状的图案，能够清晰看到组成纹理的像素，而<code>GL_LINEAR</code>能够产生更平滑的图案，很难看出单个的纹理像素。<code>GL_LINEAR</code>可以产生更真实的输出，但有些开发者更喜欢8-bit风格，所以他们会用<code>GL_NEAREST</code>选项。</p>
+<p>当进行放大和缩小操作的时候可以设置纹理过滤的选项，比如你可以在纹理被缩小的时候使用邻近过滤，被放大时使用线性过滤。使用<code>glTexParameter*</code>函数为放大和缩小指定过滤方式。这和纹理环绕方式的设置差不多：</p>
+<pre><code class="language-c++">glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+</code></pre>
+<h2 id="多级渐远纹理">多级渐远纹理</h2>
+<p>假设有一个包含着上千物体的大房间，每个物体上都有纹理。有些物体会很远，但其纹理会拥有与近处物体同样高的分辨率。</p>
+<p>由于远处的物体可能只产生很少的片段，OpenGL从高分辨率纹理中为这些片段获取正确的颜色值就很困难，因为它需要对一个跨过纹理很大部分的片段只拾取一个纹理颜色。</p>
+<p>在小物体上这会产生不真实的感觉，更不用说对它们使用高分辨率纹理浪费内存的问题了。</p>
+<p>OpenGL使用一种叫做<strong>多级渐远纹理</strong>的概念来解决这个问题，它简单来说就是一系列的纹理图像，后一个纹理图像是前一个的二分之一。多级渐远纹理背后的理念很简单：距观察者的距离超过一定的阈值，OpenGL会使用不同的多级渐远纹理，即最适合物体的距离的那个。由于距离远，解析度不高也不会被用户注意到。同时，多级渐远纹理另一加分之处是它的性能非常好。</p>
+<p>可以使用<code>glGenerateMipmaps</code>函数来创建多级渐远纹理，在创建完一个纹理后调用它OpenGL就会承担接下来的所有工作了。</p>
+<p>在渲染中切换多级渐远纹理级别(Level)时，OpenGL在两个不同级别的多级渐远纹理层之间会产生不真实的生硬边界。就像普通的纹理过滤一样，切换多级渐远纹理级别时你也可以在两个不同多级渐远纹理级别之间使用<code>NEAREST</code>和<code>LINEAR</code>过滤<br>
+。</p>
+<p>为了指定不同多级渐远纹理级别之间的过滤方式，可以使用下面四个选项中的一个代替原有的过滤方式：</p>
+<ul>
+<li><code>GL_NEAREST_MIPMAP_NEAREST</code>：使用最邻近的多级渐远纹理来匹配像素大小，并使用邻近插值进行纹理采样</li>
+<li><code>GL_LINEAR_MIPMAP_NEAREST</code>：使用最邻近的多级渐远纹理级别，并使用线性插值进行采样</li>
+<li><code>GL_NEAREST_MIPMAP_LINEAR</code>：在两个最匹配像素大小的多级渐远纹理之间进行线性插值，使用邻近插值进行采样</li>
+<li><code>GL_LINEAR_MIPMAP_LINEAR</code>：在两个邻近的多级渐远纹理之间使用线性插值，并使用线性插值进行采样</li>
+</ul>
+<p>就像纹理过滤一样，可以使用<code>glTexParameteri</code>将过滤方式设置为上面四种提到的方法之一。</p>
+<p>但是注意，一个常见的错误是，将放大过滤的选项设置为多级渐远纹理过滤选项之一。这样没有任何效果，因为多级渐远纹理主要是使用在纹理被缩小的情况下的：纹理放大不会使用多级渐远纹理，为放大过滤设置多级渐远纹理的选项会产生一个<code>GL_INVALID_ENUM</code>错误代码。</p>
+<h2 id="创建纹理">创建纹理</h2>
+<p>上面介绍了这么多，终于可以到创建纹理的部分了。但是，在创建纹理之前，首先必须获取纹理。也就是说，如何将需要映射的2D图像加载进来呢？</p>
+<h3 id="加载图片">加载图片</h3>
+<p><code>stb_image.h</code>是Sean Barrett的一个非常流行的单头文件图像加载库，它能够加载大部分流行的文件格式，并且能够很简单得整合到工程之中。下载地址：https://github.com/nothings/stb/blob/master/stb_image.h</p>
+<p>下载这一个头文件，将它加入工程，并另创建一个新的C++文件，通过定义STB_IMAGE_IMPLEMENTATION的宏定义，来启用它的静态版本：</p>
+<pre><code class="language-c++">#define STB_IMAGE_IMPLEMENTATION
+#include &quot;stb_image.h&quot;
+</code></pre>
+<p>通过定义<code>STB_IMAGE_IMPLEMENTATION</code>，预处理器会修改头文件，让其只包含相关的函数定义源码，等于是将这个头文件变为一个 <code>.cpp</code> 文件了。</p>
+<p>接着在工程文件中引用该头文件，使用它的<code>stbi_load</code>函数加载图片即可：</p>
+<pre><code class="language-c++">stbi_set_flip_vertically_on_load(true);
+int width, height, nrChannels;
+unsigned char *data = stbi_load(&quot;xx.jpg&quot;, &amp;width, &amp;height, &amp;nrChannels, 0);
+</code></pre>
+<p>OpenGL要求y轴0.0坐标是在图片的底部的，但是图片的y轴0.0坐标通常在顶部。因此，一般而言，需要使用<code>stbi_set_flip_vertically_on_load</code>对加载的图片进行反转。</p>
+<p><code>stbi_load</code>函数首先接受一个图像文件的位置作为输入。<br>
+接下来它需要三个<code>int</code>作为它的第二、第三和第四个参数，<code>stb_image.h</code>将会用图像的宽度、高度和颜色通道的个数填充这三个变量。</p>
+<h3 id="生成纹理">生成纹理</h3>
+<p>和所有之前生成的OpenGL对象一样，纹理也是使用ID引用的。接着，绑定该纹理。然后使用载入的图片生成纹理。</p>
+<pre><code class="language-c++">unsigned int texture;
+glGenTextures(1, &amp;texture);
+glBindTexture(GL_TEXTURE_2D, texture);
+glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, width, height, 0, GL_RGB, GL_UNSIGNED_BYTE, data);
+glGenerateMipmap(GL_TEXTURE_2D);
+
+stbi_image_free(data);
+</code></pre>
+<p><code>glGenTextures</code>函数首先需要输入生成纹理的数量，然后把它们储存在第二个参数的<code>unsigned int</code>数组中（这里只有一个纹理）。</p>
+<p>图片纹理可以通过<code>glTexImage2D</code>来生成，其参数如下：</p>
+<ul>
+<li>第一个参数指定了纹理目标。设置为<code>GL_TEXTURE_2D</code>意味着会生成与当前绑定的纹理对象在同一个目标上的纹理，因为目前操作的纹理对象就是<code>GL_TEXTURE_2D</code>（任何绑定到<code>GL_TEXTURE_1D</code>和<code>GL_TEXTURE_3D</code>的纹理不会受到影响）。</li>
+<li>第二个参数为纹理指定多级渐远纹理的级别，如果你希望单独手动设置每个多级渐远纹理的级别的话。这里填0，也就是基本级别。</li>
+<li>第三个参数告诉OpenGL希望把纹理储存为何种格式。这里的图像只有RGB值，因此把纹理储存为RGB值。</li>
+<li>第四个和第五个参数设置最终的纹理的宽度和高度。之前加载图像的时候储存了它们，所以使用对应的变量即可。</li>
+<li>下个参数应该总是被设为0（历史遗留的问题）。</li>
+<li>第七第八个参数定义了源图的格式和数据类型。这里使用RGB值加载这个图像，并把它们储存为char(byte)数组。</li>
+<li>最后一个参数是真正的图像数据。</li>
+</ul>
+<p>当调用<code>glTexImage2D</code>时，当前绑定的纹理对象就会被附加上纹理图像。然而，目前只有基本级别(Base-level)的纹理图像被加载了，如果要使用多级渐远纹理，必须手动设置所有不同的图像（不断递增第二个参数）。或者，直接在生成纹理之后调用<code>glGenerateMipmap</code>。这会为当前绑定的纹理自动生成所有需要的多级渐远纹理。</p>
+<p>最后调用<code>stbi_image_free</code>释放内存。</p>
+<h3 id="应用纹理">应用纹理</h3>
+<p>这里，准备使用一个矩形来展示纹理，因此需要更新一下顶点数组。采用两个三角形的来拼出一个正方形。</p>
+<p>同时，还需要指定纹理坐标，因此，还需要添加额外的属性。</p>
+<pre><code class="language-c++">float vertices[] = {
+//     ---- 位置 ----       ---- 颜色 ----     - 纹理坐标 -
+     0.5f,  0.5f, 0.0f,   1.0f, 0.0f, 0.0f,   1.0f, 1.0f,   // 右上
+     0.5f, -0.5f, 0.0f,   0.0f, 1.0f, 0.0f,   1.0f, 0.0f,   // 右下
+    -0.5f, -0.5f, 0.0f,   0.0f, 0.0f, 1.0f,   0.0f, 0.0f,   // 左下
+    -0.5f,  0.5f, 0.0f,   1.0f, 1.0f, 0.0f,   0.0f, 1.0f    // 左上
+};
+
+glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)(6 * sizeof(float)));
+glEnableVertexAttribArray(2);
+</code></pre>
+<p>接着改动着色器代码来接受纹理坐标：</p>
+<pre><code class="language-GLSL">#shader vertex
+#version 330 core
+layout (location = 0) in vec3 aPos;
+layout (location = 1) in vec3 aColor;
+layout (location = 2) in vec2 aTexCoord;
+
+out vec3 ourColor;
+out vec2 TexCoord;
+
+void main()
+{
+    gl_Position = vec4(aPos, 1.0);
+    ourColor = aColor;
+    TexCoord = aTexCoord;
+}
+
+#shader fragment
+#version 330 core
+out vec4 FragColor;
+
+in vec3 ourColor;
+in vec2 TexCoord;
+
+uniform sampler2D ourTexture;
+
+void main()
+{
+    FragColor = texture(ourTexture, TexCoord);
+}
+</code></pre>
+<p>顶点着色器接受顶点坐标为一个顶点属性，并把坐标传给片段着色器。片段着色器接着把<code>TexCoord</code>作为输入变量。</p>
+<p>GLSL有一个供纹理对象使用的内建数据类型，叫做采样器(Sampler)，它以纹理类型作为后缀，比如<code>sampler1D</code>、<code>sampler3D</code>，或在例子中的<code>sampler2D</code>。</p>
+<p>通过声明一个uniform sampler2D把一个纹理添加到片段着色器中，注意要把纹理赋值给这个uniform。默认情况下，OpenGL会激活纹理单元0，因此只有一个纹理时可以不设置。</p>
+<p>用GLSL内建的texture函数来采样纹理的颜色，它第一个参数是纹理采样器，第二个参数是对应的纹理坐标。texture函数会使用之前设置的纹理参数对相应的颜色值进行采样。这个片段着色器的输出就是纹理的（插值）纹理坐标上的(过滤后的)颜色。</p>
+<p>最后在调用glDrawElements之前绑定纹理，它会自动把纹理赋值给片段着色器的采样器：</p>
+<pre><code class="language-c++">glBindTexture(GL_TEXTURE_2D, texture);
+glBindVertexArray(VAO);
+glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
+</code></pre>
+<p>设置完成，该图形应该显示如下：<br>
+<img src="https://wjcsw.github.io/post-images/1692696339440.png" alt="" loading="lazy"></p>
+<h3 id="纹理单元">纹理单元</h3>
+<p>使用<code>glUniform1i</code>可以给纹理采样器分配一个位置值，这样的话能够在一个片段着色器中设置多个纹理。</p>
+<p>一个纹理的位置值通常称为一个纹理单元。一个纹理的默认纹理单元是0，它是默认的激活纹理单元。</p>
+<p>纹理单元的主要目的是让我们在着色器中可以使用多于一个的纹理。通过把纹理单元赋值给采样器可以一次绑定多个纹理，只要首先激活对应的纹理单元。</p>
+<p>就像<code>glBindTexture</code>一样，可以使用<code>glActiveTexture</code>激活纹理单元，传入需要使用的纹理单元。</p>
+<pre><code class="language-c++">glActiveTexture(GL_TEXTURE0); // 在绑定纹理之前先激活纹理单元
+glBindTexture(GL_TEXTURE_2D, texture);
+</code></pre>
+<p>激活纹理单元之后，接下来的<code>glBindTexture</code>函数调用会绑定这个纹理到当前激活的纹理单元，纹理单元<code>GL_TEXTURE0</code>默认总是被激活，所以在前面的例子里使用<code>glBindTexture</code>的时候，无需激活任何纹理单元。</p>
+<p>OpenGL至少保证有16个纹理单元供你使用，也就是说你可以激活从<code>GL_TEXTURE0</code>到<code>GL_TEXTRUE15</code>。<strong>它们都是按顺序定义的</strong>，所以也可以通过<code>GL_TEXTURE0 + 8</code>的方式获得<code>GL_TEXTURE8</code>，这在需要循环一些纹理单元的时候会很有用。</p>
+<p>同样的，使用多个纹理时也需要定义多个uniform来接受。使用两个纹理的shaer代码如下所示：</p>
+<pre><code class="language-GLSL">#version 330 core
+...
+
+uniform sampler2D texture1;
+uniform sampler2D texture2;
+
+void main()
+{
+    FragColor = mix(texture(texture1, TexCoord), texture(texture2, TexCoord), 0.2);
+}
+</code></pre>
+<p>最终输出颜色现在是两个纹理的结合。GLSL内建的mix函数需要接受两个值作为参数，并对它们根据第三个参数进行线性插值。第三个参数代表第一个值的权重。</p>
+<p>为了使用第二个纹理（以及第一个），必须改变一点渲染流程，先绑定两个纹理到对应的纹理单元，然后<strong>定义哪个uniform采样器对应哪个纹理单元</strong>：</p>
+<pre><code class="language-c++">glActiveTexture(GL_TEXTURE0);
+glBindTexture(GL_TEXTURE_2D, texture1);
+glActiveTexture(GL_TEXTURE1);
+glBindTexture(GL_TEXTURE_2D, texture2);
+</code></pre>
+<p>通过使用glUniform1i设置每个采样器的方式告诉OpenGL每个着色器采样器属于哪个纹理单元。</p>
+<p>只需要设置一次即可，所以这个会放在渲染循环的前面:</p>
+<pre><code class="language-c++">glUniform1i(ourShader.GetUniformLocation(&quot;texture1&quot;), 0); // 手动设置
+ourShader.SetUniform1i(&quot;texture2&quot;, 1); // 或者使用着色器类设置
+</code></pre>
+<p>通过使用glUniform1i设置采样器，保证了每个uniform采样器对应着正确的纹理单元。</p>
+<h2 id="参考资料">参考资料</h2>
+<p>[1] https://learnopengl-cn.readthedocs.io/zh/latest/01%20Getting%20started/03%20Hello%20Window/</p>
+<p>[2] http://bit.ly/2lt7ccM</p>
+]]></content>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[[OpenGL入门教程] 5. 统一进行类封装]]></title>
+        <id>https://wjcsw.github.io/GoNtnobuG/</id>
+        <link href="https://wjcsw.github.io/GoNtnobuG/">
+        </link>
+        <updated>2023-08-16T07:32:47.000Z</updated>
+        <content type="html"><![CDATA[<p>上一篇博客中，已经将着色器部分的代码抽象成了类，这使得主程序部分精简了许多，并且也更加便于管理和改动。这里，进一步将剩余的OpenGL的代码进行抽象，全部封装成类。</p>
+<h2 id="顶点缓冲区类">顶点缓冲区类</h2>
+<p>顶点缓冲区的类设计很简单，就是单纯的创建缓冲区和绑定。下面直接展示代码：</p>
+<pre><code class="language-C++">// VertexBuff.h
+#pragma once
+
+class VertexBuff
+{
+private:
+	unsigned int m_RendererID;
+public:
+	VertexBuff(const void* data, unsigned int size);
+	~VertexBuff();
+
+	void Bind() const;
+	void Unbind() const;
+};
+
+
+// VertexBuff.cpp
+#include &quot;VertexBuff.h&quot;
+#include &quot;renderer.h&quot;
+
+
+VertexBuff::VertexBuff(const void* data, unsigned int size):m_RendererID(0)
+{
+    GLCall(glGenBuffers(1, &amp;m_RendererID));
+    GLCall(glBindBuffer(GL_ARRAY_BUFFER, m_RendererID));
+    GLCall(glBufferData(GL_ARRAY_BUFFER, size, data, GL_STATIC_DRAW));
+}
+
+VertexBuff::~VertexBuff()
+{
+    GLCall(glDeleteBuffers(1, &amp;m_RendererID));
+}
+
+void VertexBuff::Bind() const
+{
+    GLCall(glBindBuffer(GL_ARRAY_BUFFER, m_RendererID));
+}
+
+void VertexBuff::Unbind() const
+{
+    GLCall(glBindBuffer(GL_ARRAY_BUFFER, 0));
+}
+</code></pre>
+<p>在构造函数中，调用之前主函数的构建代码来创建缓冲区，析构时自动删除，从而避免了我们的手动操作。</p>
+<h2 id="索引缓冲区类">索引缓冲区类</h2>
+<p>索引缓冲区类的设计与顶点缓冲区差不多，唯一的区别是顶点缓冲区直接传入顶点数据的大小，而索引缓冲区传入的是索引的个数。</p>
+<pre><code class="language-c++">// IndexBuff.h
+#pragma once
+#include &lt;iostream&gt;
+
+class IndexBuff
+{
+private:
+	unsigned int m_RendererID;
+	unsigned int m_Count;
+public:
+	IndexBuff(const unsigned int* data, unsigned int count);
+	~IndexBuff();
+
+	void Bind() const;
+	void Unbind() const;
+
+	unsigned int GetCount() const{
+		return m_Count;
+	}
+};
+
+// IndexBuff.cpp
+#include &quot;IndexBuff.h&quot;
+#include &quot;renderer.h&quot;
+
+
+IndexBuff::IndexBuff(const unsigned int* data, unsigned int count):m_Count(count), m_RendererID(0)
+{
+    ASSERT(sizeof(GLuint) == sizeof(unsigned int));
+    GLCall(glGenBuffers(1, &amp;m_RendererID));
+    GLCall(glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, m_RendererID));
+    GLCall(glBufferData(GL_ELEMENT_ARRAY_BUFFER, count * sizeof(unsigned int), data, GL_STATIC_DRAW));
+}
+
+IndexBuff::~IndexBuff()
+{
+    GLCall(glDeleteBuffers(1, &amp;m_RendererID));
+}
+
+void IndexBuff::Bind() const
+{
+    GLCall(glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, m_RendererID));
+}
+
+void IndexBuff::Unbind() const
+{
+    GLCall(glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0));
+}
+
+</code></pre>
+<h2 id="顶点布局类">顶点布局类</h2>
+<p>考虑到顶点数组类型必须指定其布局才能使用，因此，在创建顶点数组类之前，先创建一个顶点布局类用于指定布局。</p>
+<p>这个类比较简单，出于方便考虑，直接将定义写在了头文件中。</p>
+<pre><code class="language-c++">#pragma once
+#include &lt;vector&gt;
+#include &quot;renderer.h&quot;
+#include &lt;GL/glew.h&gt;
+
+struct VertexBuffElement
+{
+	unsigned int type;
+	unsigned int count;
+	unsigned char normalized;
+
+	VertexBuffElement(unsigned int type,unsigned int count, unsigned char normalized):type(type),count(count),normalized(normalized){}
+
+	static unsigned int GetSizeOfType(unsigned int type) {
+		switch (type)
+		{
+		case GL_FLOAT:			return 4;
+		case GL_UNSIGNED_INT:	return 4;
+		case GL_UNSIGNED_BYTE:	return 1;
+		}
+		ASSERT(false);
+		return 0;
+	}
+};
+
+class VertexBuffLayout {
+private:
+	std::vector&lt;VertexBuffElement&gt; m_Elements;
+	unsigned int m_Stride;
+public:
+	VertexBuffLayout() :m_Stride(0){};
+
+	template&lt;typename T&gt;
+	void push(unsigned int count)
+	{
+		//static_assert(true,&quot;1&quot;);
+	}
+
+	template&lt;&gt;
+	void push&lt;float&gt;(unsigned int count)
+	{
+		m_Elements.push_back({ GL_FLOAT,count,GL_FALSE });
+		m_Stride += VertexBuffElement::GetSizeOfType(GL_FLOAT) * count;
+	}
+
+	template&lt;&gt;
+	void push&lt;unsigned int&gt;(unsigned int count)
+	{
+		m_Elements.push_back({ GL_UNSIGNED_INT,count,GL_FALSE });
+		m_Stride += VertexBuffElement::GetSizeOfType(GL_UNSIGNED_INT) * count;
+	}
+
+	template&lt;&gt;
+	void push&lt;unsigned char&gt;(unsigned int count)
+	{
+		m_Elements.push_back({ GL_UNSIGNED_BYTE,count,GL_TRUE });
+		m_Stride += VertexBuffElement::GetSizeOfType(GL_UNSIGNED_BYTE) * count;
+	}
+
+	unsigned int GetStride() const {
+		return m_Stride;
+	}
+
+	const std::vector&lt;VertexBuffElement&gt;&amp; GetElements() const {
+		return m_Elements;
+	}
+};
+</code></pre>
+<p>这个头文件中，首先创建了<code>VertexBuffElement</code>类用于表示顶点属性，主要包括顶点属性的类型，元素个数以及是否进行归一化。</p>
+<p>接着创建布局类，布局类中用一个<code>vector</code>储存所有的顶点属性，并使用一个变量记录步长。</p>
+<p>然后定义了插入布局的方法，为了统一地使用这种方法，将其定义为了函数模板，并为其实例化。每次添加属性时，同时累加步长。</p>
+<p>为了使用方便，还定义了接口对外返回步长和属性。</p>
+<h2 id="顶点数组对象类">顶点数组对象类</h2>
+<p>顶点数组对象主要负责构建一个顶点数组对象，并提供设置新的属性的功能即可。</p>
+<pre><code class="language-c++">// VertexArray.h
+#pragma once
+#include &quot;VertexBuff.h&quot;
+
+class VertexBuffLayout;
+
+class VertexArray{
+private:
+	unsigned int m_RendererID;
+public:
+	VertexArray();
+	~VertexArray();
+
+	void AddBuffer(const VertexBuff&amp; vb, const VertexBuffLayout&amp; layout);
+
+	void Bind() const;
+	void Unbind() const;
+};
+
+// VertexArray.cpp
+#include &quot;VertexArray.h&quot;
+#include &quot;VertexBuffLayout.h&quot;
+#include &quot;renderer.h&quot;
+
+
+VertexArray::VertexArray()
+{
+	GLCall(glGenVertexArrays(1, &amp;m_RendererID));
+	
+}
+
+VertexArray::~VertexArray()
+{
+	GLCall(glDeleteVertexArrays(1, &amp;m_RendererID));
+}
+
+void VertexArray::AddBuffer(const VertexBuff&amp; vb, const VertexBuffLayout&amp; layout)
+{
+	Bind();
+	vb.Bind();
+	const auto&amp; elements = layout.GetElements();
+	unsigned int offset = 0;
+	for (unsigned int i = 0; i &lt; elements.size(); ++i) {
+		const auto&amp; e = elements[i];
+		GLCall(glEnableVertexAttribArray(i));
+		GLCall(glVertexAttribPointer(i, e.count, e.type, e.normalized , layout.GetStride(), (const void *)offset));
+		offset += e.count * VertexBuffElement::GetSizeOfType(e.type);
+	}
+}
+
+void VertexArray::Bind() const
+{
+	GLCall(glBindVertexArray(m_RendererID));
+}
+
+void VertexArray::Unbind() const
+{
+	GLCall(glBindVertexArray(0));
+}
+</code></pre>
+<p>在<code>AddBuffer</code>中，依次取出布局中设置好的属性，设置属性指针并启用，然后附加对应偏移量，避免了手工执行的繁琐，也更不容易出错。</p>
+<p>其余部分与主程序中一致，直接拿过来用即可。</p>
+<h2 id="渲染器类">渲染器类</h2>
+<p>最后，将这些所有执行部分抽象成一个渲染器，它负责完成所有的OpenGL工作，渲染出对应图形，从而将整个过程封装起来。</p>
+<pre><code class="language-c++">// renderer.h
+#pragma once
+
+#include &lt;GL/glew.h&gt;
+#include &quot;VertexArray.h&quot;
+#include &quot;IndexBuff.h&quot;
+#include &quot;Shader.h&quot;
+
+#define ASSERT(x) if(!(x)) __debugbreak();
+#define GLCall(x) GLClearError();\
+        x;\
+        ASSERT(GLPrintError(#x,__FILE__,__LINE__))
+
+void GLClearError();
+
+bool GLPrintError(const char* func_name, const char* file, int line); 
+
+class Renderer {
+public:
+    void draw(const VertexArray&amp; va, const IndexBuff&amp; ib, const Shader &amp;shader) const;
+    void clear() const;
+};
+
+// renderer.cpp
+#include &quot;renderer.h&quot;
+
+#include &lt;iostream&gt;
+
+void GLClearError() {
+    while (glGetError() != GL_NO_ERROR);  //GL_NO_ERROR = 0
+}
+
+bool GLPrintError(const char* func_name, const char* file, int line) {
+    while (GLenum error = glGetError()) {  //因为 GL_NO_ERROR = 0， 故循环可以写成这个形式
+        std::cout &lt;&lt; &quot;[OPENGL Error] (&quot; &lt;&lt; error &lt;&lt; &quot;): &quot; &lt;&lt; func_name &lt;&lt; &quot; &quot; &lt;&lt; file &lt;&lt; &quot;:&quot; &lt;&lt; line &lt;&lt; std::endl;
+        return false;
+    }
+    return true;
+}
+
+void Renderer::draw(const VertexArray&amp; va, const IndexBuff&amp; ib, const Shader&amp; shader) const
+{
+    shader.Bind();
+    va.Bind();
+    ib.Bind();
+    GLCall(glDrawElements(GL_TRIANGLES, 3, GL_UNSIGNED_INT, nullptr));
+}
+
+void Renderer::clear() const
+{
+    glClearColor(0.1f, 0.2f, 0.3f, 1.0f);
+    GLCall(glClear(GL_COLOR_BUFFER_BIT));
+}
+</code></pre>
+<p>这里渲染器目前只负责调用前面构造好的类，绑定好并执行绘画，以及负责清除上次的画面。</p>
+<p>到这，已经将所有的OpenGL代码统一封装成类了，后续使用只需要调用这些封装好的类即可。当然，后续随着功能的增多，这些类也还会扩展，但是大体结构是这样的。</p>
+<p>这样抽象以后，目前主程序的代码已经非常精简了。</p>
+<h2 id="参考资料">参考资料</h2>
+<p>[1] https://learnopengl-cn.readthedocs.io/zh/latest/01%20Getting%20started/03%20Hello%20Window/</p>
+<p>[2] http://bit.ly/2lt7ccM</p>
+]]></content>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[[OpenGL入门教程] 4. 构造着色器类]]></title>
+        <id>https://wjcsw.github.io/o_5GuAA5l/</id>
+        <link href="https://wjcsw.github.io/o_5GuAA5l/">
+        </link>
+        <updated>2023-08-14T05:34:51.000Z</updated>
+        <content type="html"><![CDATA[<p>着色器(Shader)是运行在GPU上的小程序。这些小程序为图形渲染管线的某个特定部分而运行。</p>
+<p>从基本意义上来说，着色器只是一种把输入转化为输出的程序。</p>
+<h2 id="着色器结构">着色器结构</h2>
+<p>一个典型的着色器有下面的结构：</p>
+<pre><code class="language-GLSL">#version version_number
+in type in_variable;
+in type in_variable_2;
+
+out type out_variable;
+
+uniform type uniform_1;
+
+int main()
+{
+  // 处理输入并进行一些图形操作
+  ...
+  // 输出处理过的结果到输出变量
+  out_variable_name = stuff_we_processed;
+}
+</code></pre>
+<p>着色器的开头总是要声明版本，接着是输入和输出变量、<code>uniform</code>和<code>main</code>函数。每个着色器的入口点都是<code>main</code>函数，在这个函数中我们处理所有的输入变量，并将结果输出到输出变量中。</p>
+<p><code>uniform</code>是一种从CPU中的应用向GPU中的着色器发送数据的方式，但<code>uniform</code>和顶点属性有些不同。首先，<code>uniform</code>是全局的，意味着<code>uniform</code>变量必须在每个着色器程序对象中都是独一无二的，而且它可以被着色器程序的任意着色器在任意阶段访问。第二，无论你把<code>uniform</code>值设置成什么，<code>uniform</code>会一直保存它们的数据，直到它们被重置或更新。</p>
+<p>可以在一个着色器中添加<code>uniform</code>关键字至类型和变量名前来声明一个GLSL的<code>uniform</code>。接着就可以在着色器中使用新声明的<code>uniform</code>了。</p>
+<pre><code class="language-GLSL">#version 330 core
+out vec4 FragColor;
+
+uniform vec4 ourColor; 
+
+void main()
+{
+    FragColor = ourColor;
+}
+</code></pre>
+<p>这里在片段着色器中声明了一个<code>uniform</code>是<code>vec4</code>类型的<code>ourColor</code>，并把片段着色器的输出颜色设置为uniform值的内容。</p>
+<p>因为<code>uniform</code>是全局变量，可以在任何着色器中定义它们，而无需通过顶点着色器作为中介。顶点着色器中不需要这个<code>uniform</code>，所以不用在那里定义它。</p>
+<p>为了向这个<code>uniform</code>中传递数据，需要在CPU程序中获取到该属性的索引，然后更新其值。</p>
+<pre><code class="language-C++">int vertexColorLocation = glGetUniformLocation(shaderProgram, &quot;ourColor&quot;);
+glUseProgram(shaderProgram);
+glUniform4f(vertexColorLocation, 0.0f, 0.5f, 0.0f, 1.0f);
+</code></pre>
+<p>通过<code>glGetUniformLocation</code>可以查询<code>uniform</code>的位置值。为查询函数提供着色器程序和<code>uniform</code>的名字。如果<code>glGetUniformLocation</code>返回<code>-1</code>就代表没有找到这个位置值。</p>
+<p>通过<code>glUniform4f</code>函数可以设置vec4的float类型的<code>uniform</code>值。类似的也有<code>glUniform2i</code>对应vec2的int数组的<code>uniform</code>等。注意，查询<code>uniform</code>地址不要求你之前使用过着色器程序，但是更新一个<code>uniform</code>之前你必须先使用程序（调用<code>glUseProgram</code>），因为它是在当前激活的着色器程序中设置<code>uniform</code>的。</p>
+<h3 id="向量">向量</h3>
+<p>在顶点着色器中，每个输入变量也叫<strong>顶点属性</strong>(Vertex Attribute)。我们能声明的<strong>顶点属性</strong>是有上限的，它一般由硬件来决定。</p>
+<p><strong>OpenGL确保至少有16个包含4分量的顶点属性可用</strong>，但是有些硬件或许允许更多的顶点属性，可以通过<code>glGetIntegerv</code>函数查询<code>GL_MAX_VERTEX_ATTRIBS</code>来获取具体的上限。</p>
+<pre><code class="language-C++">glGetIntegerv(GL_MAX_VERTEX_ATTRIBS, &amp;nrAttributes);
+</code></pre>
+<p>GLSL中包含C等其它语言大部分的默认基础数据类型：<code>int</code>、<code>float</code>、<code>double</code>、<code>uint</code>和<code>bool</code>,，以及两种容器类型向量(Vector)和矩阵(Matrix)。</p>
+<p>GLSL中的向量是一个可以包含有2、3或者4个分量的容器，分量的类型可以是前面默认基础类型的任意一个。默认的<code>vecn</code>表示包含<code>n</code>个<code>float</code>分量的默认向量，对应的有<code>bvecn</code>表示包含<code>n</code>个<code>bool</code>分量的向量，<code>ivecn</code>表示包含<code>n</code>个<code>int</code>分量的向量等。可以分别使用<code>.x</code>、<code>.y</code>、<code>.z</code>和<code>.w</code>来获取它们的第1、2、3、4个分量。</p>
+<h3 id="输入输出">输入输出</h3>
+<p>GLSL定义了<code>in</code>和<code>out</code>关键字，每个着色器使用这两个关键字设定输入和输出，只要一个输出变量与下一个着色器阶段的输入匹配，它就会传递下去。所以，如果打算从一个着色器向另一个着色器发送数据，<strong>必须在发送方着色器中声明一个输出，在接收方着色器中声明一个类似的输入</strong>。<strong>当类型和名字都一样的时候，OpenGL就会把两个变量链接到一起</strong>，它们之间就能发送数据了（这是在链接程序对象时完成的）。</p>
+<p>顶点着色器的输入特殊在，它从顶点数据中直接接收输入。为了定义顶点数据该如何管理，使用<code>location</code>这一元数据指定输入变量，这样才可以在CPU上配置顶点属性。例如前面使用过的<code>layout (location = 0)</code>，顶点着色器需要为它的输入提供一个额外的<code>layout</code>标识。</p>
+<p>而片段着色器需要一个<code>vec4</code>颜色输出变量，因为片段着色器需要生成一个最终输出的颜色。如果在片段着色器没有定义输出颜色，OpenGL会把你的物体渲染为黑色（或白色）。</p>
+<h2 id="编写着色器类">编写着色器类</h2>
+<p>有了上面的了解，目前已经可以成功地通过着色器来构建我们的图形了。但是每次更改都要改动一大堆代码，它们分布在整个程序中，每次相当麻烦。并且，目前的程序是以字符串形式写在程序里的，这显然是不符合需求的，应该改为从文件中读取。</p>
+<p>基于这些需求，可以将着色器部分抽象成一个类，对外提供这些接口，从而便于管理和改动。</p>
+<p>下面是着色器类的头文件</p>
+<pre><code class="language-C++">#pragma once
+#include &lt;string&gt;
+#include &lt;iostream&gt;
+#include &lt;GL/glew.h&gt;
+#include &lt;fstream&gt;
+#include &lt;sstream&gt;
+#include &lt;unordered_map&gt;
+
+struct ShaderProgramSource
+{
+	std::string VertexSource;
+	std::string FragmentSource;
+};
+
+class Shader
+{
+private:
+	unsigned int m_RendererID;
+	std::string m_file;
+	std::unordered_map&lt;std::string, int&gt; m_location_memory;
+
+	int GetUniformLocation(const std::string&amp; name);
+	ShaderProgramSource ParseShader();
+	unsigned int compile_shader(const std::string&amp; source, unsigned int type);
+	unsigned int create_shader(const std::string&amp; vertexShader, const std::string&amp; fragmentShader);
+public:
+	Shader(const std::string&amp; filename);
+	~Shader();
+
+	void Bind() const;
+	void Unbind() const;
+
+	// set uniforms
+	void SetUniform4f(const std::string&amp; name, float v0, float v1, float v2, float v3);
+
+	void SetUniform1i(const std::string&amp; name, int value);
+
+	void SetUniform1f(const std::string&amp; name, float value);
+
+};
+</code></pre>
+<p>首先着色器类需要储存着色器程序的ID，它的构造器需要顶点和片段着色器源代码的文件路径，这样我们就可以把源码的文本文件储存在硬盘上了。其次，为了方便调试，这里将文件名也作为变量储存了。</p>
+<p>然后是如何读取和设置程序，这里将顶点着色器和片段着色器内容放在同一个文件中，因此需要一个额外的解析工作。其余部分与之前类似，将其放进函数中即可。为了方便起见，提供了设置Uniform的方法和绑定解绑的方法。</p>
+<p>下面是具体的实现</p>
+<pre><code class="language-c++">#include &quot;Shader.h&quot;
+#include &quot;renderer.h&quot;
+
+int Shader::GetUniformLocation(const std::string&amp; name)
+{
+    if (m_location_memory.find(name) != m_location_memory.end()) {
+        return m_location_memory[name];
+    }
+    GLCall(int location = glGetUniformLocation(m_RendererID, name.c_str()));
+    m_location_memory[name] = location;
+	return location;
+}
+
+Shader::Shader(const std::string&amp; filename):m_file(filename),m_RendererID (0)
+{
+    GLCall(ShaderProgramSource source = ParseShader());
+    m_RendererID = create_shader(source.VertexSource, source.FragmentSource);
+}
+
+Shader::~Shader()
+{
+    GLCall(glDeleteProgram(m_RendererID));
+}
+
+
+void Shader::Bind() const
+{
+    GLCall(glUseProgram(m_RendererID));
+}
+
+void Shader::Unbind() const
+{
+    GLCall(glUseProgram(0));
+}
+
+ShaderProgramSource Shader::ParseShader()
+{
+    std::ifstream file(m_file);
+
+    enum class ShaderType
+    {
+        NONE = -1, VERTEX = 0, FRAGMENT = 1
+    };
+    std::stringstream ss[2];
+    std::string line;
+    ShaderType type = ShaderType::NONE;
+    while (getline(file, line)) {
+        if (line.find(&quot;#shader&quot;) != std::string::npos)
+        {
+            if (line.find(&quot;vertex&quot;) != std::string::npos)
+            {
+                type = ShaderType::VERTEX;
+            }
+            else if (line.find(&quot;fragment&quot;) != std::string::npos)
+            {
+                type = ShaderType::FRAGMENT;
+            }
+        }
+        else {
+            ss[(int)type] &lt;&lt; line &lt;&lt; &quot;\n&quot;;
+        }
+    }
+    return { ss[0].str(),ss[1].str() };
+}
+
+void Shader::SetUniform4f(const std::string&amp; name, float v0, float v1, float v2, float v3)
+{
+    int location = GetUniformLocation(name);
+    ASSERT(location != -1);
+    GLCall(glUniform4f(location, v0, v1, v2, v3));
+}
+
+void Shader::SetUniform1i(const std::string&amp; name, int value)
+{
+    int location = GetUniformLocation(name);
+    ASSERT(location != -1);
+    GLCall(glUniform1i(location, value));
+}
+
+void Shader::SetUniform1f(const std::string&amp; name, float value)
+{
+    int location = GetUniformLocation(name);
+    ASSERT(location != -1);
+    GLCall(glUniform1f(location, value));
+}
+
+unsigned int Shader::compile_shader(const std::string&amp; source, unsigned int type)
+{
+    unsigned int id = glCreateShader(type);
+    const char* src = source.c_str();
+
+    glShaderSource(id, 1, &amp;src, nullptr);
+    glCompileShader(id);
+
+    int result;
+    glGetShaderiv(id, GL_COMPILE_STATUS, &amp;result);
+    if (result == GL_FALSE)
+    {
+        int length;
+        glGetShaderiv(id, GL_INFO_LOG_LENGTH, &amp;length);
+        char* message = (char*)alloca(sizeof(char) * (length));
+        glGetShaderInfoLog(id, length, &amp;length, message);
+        std::cout &lt;&lt; (type == GL_VERTEX_SHADER ? &quot;Vertex&quot; : &quot;&quot;) &lt;&lt; &quot; shader编译失败&quot; &lt;&lt; std::endl;
+        std::cout &lt;&lt; message &lt;&lt; std::endl;
+        glDeleteShader(id);
+        return 0;
+    }
+
+    return id;
+}
+
+unsigned int Shader::create_shader(const std::string&amp; vertexShader, const std::string&amp; fragmentShader)
+{
+    unsigned int program = glCreateProgram();
+    unsigned int vs = compile_shader(vertexShader, GL_VERTEX_SHADER);
+    unsigned int fs = compile_shader(fragmentShader, GL_FRAGMENT_SHADER);
+
+    glAttachShader(program, vs);
+    glAttachShader(program, fs);
+
+    glLinkProgram(program);
+
+    glValidateProgram(program);
+
+    glDeleteShader(vs);
+    glDeleteShader(fs);
+
+    return program;
+}
+</code></pre>
+<p>这个renderer.h是自定义的一个头文件，中定义了一个错误检测的宏定义<code>GLCall</code>，其功能就是如果某个函数运行出错就会打印错误码和行号。如果不使用的话，直接去掉即可。</p>
+<h2 id="参考资料">参考资料</h2>
+<p>[1] https://learnopengl-cn.readthedocs.io/zh/latest/01%20Getting%20started/03%20Hello%20Window/</p>
+<p>[2] http://bit.ly/2lt7ccM</p>
+]]></content>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[[OpenGL入门教程] 3. 从绘制简单图形开始]]></title>
+        <id>https://wjcsw.github.io/pHN2a_SYA/</id>
+        <link href="https://wjcsw.github.io/pHN2a_SYA/">
+        </link>
+        <updated>2023-08-13T05:52:04.000Z</updated>
+        <content type="html"><![CDATA[<h2 id="图形渲染管线">图形渲染管线</h2>
+<p>在OpenGL中，任何事物都在3D空间中，而屏幕和窗口却是2D像素数组，这导致OpenGL的大部分工作都是关于把3D坐标转变为适应你屏幕的2D像素。</p>
+<p>3D坐标转为2D坐标的处理过程是由OpenGL的图形渲染管线管理的。<br>
+图形渲染管线（Graphics Pipeline，大多译为管线），实际上指的是一堆原始图形数据途经一个输送管道，期间经过各种变化处理最终出现在屏幕的过程。</p>
+<p>图形渲染管线可以被划分为两个主要部分：第一部分把你的3D坐标转换为2D坐标，第二部分是把2D坐标转变为实际的有颜色的像素。</p>
+<p>请注意，2D坐标和像素也是不同的，2D坐标精确表示一个点在2D空间中的位置，而2D像素是这个点的近似值，2D像素受到你的屏幕/窗口分辨率的限制。</p>
+<p>图形渲染管线可以被划分为几个阶段，每个阶段将会把前一个阶段的输出作为输入。所有这些阶段都是高度专门化的（它们都有一个特定的函数），并且很容易并行执行。在GPU中执行，用于处理数据的程序叫做<strong>着色器</strong>(Shader)。OpenGL着色器是用OpenGL着色器语言(OpenGL Shading Language, <strong>GLSL</strong>)写成的。</p>
+<p>图形渲染管线包含很多部分，每个部分都将在转换顶点数据到最终像素这一过程中处理各自特定的阶段。具体流程如下图所示。<br>
+<img src="https://wjcsw.github.io/post-images/1692337953809.png" alt="" loading="lazy"></p>
+<ul>
+<li>顶点数据：顶点数据是一系列顶点的集合。一个顶点(Vertex)是一个3D坐标的数据的集合。而顶点数据是用顶点属性(Vertex Attribute)表示的，它可以包含任何想用的数据。这是绘图前需要准备好的。</li>
+<li>顶点着色器：图形渲染管线的第一个部分，它把一个单独的顶点作为输入。顶点着色器主要的目的是把3D坐标转为另一种3D坐标，同时顶点着色器允许我们对顶点属性进行一些基本处理。</li>
+<li>图元装配：将顶点着色器输出的所有顶点作为输入（如果是GL_POINTS，那么就是一个顶点），并所有的点装配成指定图元的形状。图元装配阶段的输出会传递给几何着色器。</li>
+<li>几何着色器：几何着色器把图元形式的一系列顶点的集合作为输入，它可以通过产生新顶点构造出新的（或是其它的）图元来生成其他形状。上图中，它生成了另一个三角形。几何着色器的输出会被传入光栅化阶段。</li>
+<li>光栅化：它会把图元映射为最终屏幕上相应的像素，生成供片段着色器使用的片段。</li>
+<li>片段着色器：其主要目的是计算一个像素的最终颜色，这也是所有OpenGL高级效果产生的地方。在片段着色器运行之前会执行裁切。裁切会丢弃超出视图以外的所有像素，用来提升执行效率。通常，片段着色器包含3D场景的数据（比如光照、阴影、光的颜色等等），这些数据可以被用来计算最终像素的颜色。</li>
+<li>Alpha测试和混合：在所有对应颜色值确定以后，最终的对象将会被传到Alpha测试和混合阶段。该阶段检测片段的对应的深度（和模板(Stencil)）值，用它们来判断这个像素是其它物体的前面还是后面，决定是否应该丢弃。这个阶段也会检查alpha值（透明度）并对物体进行混合(Blend)。所以，即使在片段着色器中计算出来了一个像素输出的颜色，在渲染多个三角形的时候最后的像素颜色也可能完全不同。</li>
+</ul>
+<p>对于大多数场合，我们只需要配置顶点和片段着色器就行了。几何着色器是可选的，通常使用它默认的着色器就行了。</p>
+<h2 id="顶点数据">顶点数据</h2>
+<p>OpenGL是一个3D图形库，所以在OpenGL中我们指定的所有坐标都是3D坐标（x、y和z）。</p>
+<p>OpenGL不是简单地把所有的3D坐标变换为屏幕上的2D像素；OpenGL仅当3D坐标在3个轴（x、y和z）上-1.0到1.0的范围内时才处理它。所有在这个范围内的坐标叫做标准化设备坐标，此范围内的坐标最终显示在屏幕上，而在这个范围以外的坐标则不会显示。</p>
+<pre><code class="language-c++">float vertices[] = {
+    -0.5f, -0.5f, 0.0f,
+     0.5f, -0.5f, 0.0f,
+     0.0f,  0.5f, 0.0f
+};
+</code></pre>
+<p>这里构造了一个<code>float</code>数组，以标准化设备坐标的形式对应指定了三个顶点的3D位置。</p>
+<p>为了构造一个2D的三角形，这里的每个顶点的<code>z</code>坐标都设置为<code>0</code>，保证深度一致，从而绘制一个2D图形。</p>
+<p>通过使用由<code>glViewport</code>函数提供的数据，进行<strong>视口变换</strong>，<strong>标准化设备坐标</strong>会变换为<strong>屏幕空间坐标</strong>。所得的<strong>屏幕空间坐标</strong>又会被变换为<strong>片段</strong>输入到<strong>片段着色器中</strong>。</p>
+<p>与通常的屏幕坐标不同，标准化设备坐标中y轴正方向为向上，(0, 0)坐标是这个图像的中心，而不是左上角。</p>
+<h2 id="顶点缓冲对象">顶点缓冲对象</h2>
+<p>定义这样的顶点数据以后，把它作为输入发送给图形渲染管线的第一个处理阶段：顶点着色器。顶点着色器会在GPU上创建内存用于储存我们的顶点数据，还要配置OpenGL如何解释这些内存，并且指定其如何发送给显卡。顶点着色器接着会处理我们在内存中指定数量的顶点。</p>
+<p>通过顶点缓冲对象(Vertex Buffer Objects, VBO)可以管理这个内存，它会在GPU内存（显存）中储存大量顶点。<strong>使用这些缓冲对象的好处是可以一次性的发送一大批数据到显卡上，而不是每个顶点发送一次</strong>。从CPU把数据发送到显卡相对较慢，所以只要可能都要尝试尽量一次性发送尽可能多的数据。当数据发送至显卡的内存中后，顶点着色器几乎能立即访问顶点，这是个非常快的过程。</p>
+<pre><code class="language-c++">unsigned int VBO;
+glGenBuffers(1, &amp;VBO);
+glBindBuffer(GL_ARRAY_BUFFER, VBO);  
+glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
+</code></pre>
+<p>基本上而言，使用openGL对象都需要为其绑定一个独一无二的ID。在这里，通过<code>glGenBuffers</code>函数和一个缓冲ID来生成一个<code>VBO</code>对象。</p>
+<p>OpenGL有很多缓冲对象类型，顶点缓冲对象的缓冲类型是<code>GL_ARRAY_BUFFER</code>。OpenGL允许同时绑定多个缓冲，只要它们是不同的缓冲类型。使用<code>glBindBuffer</code>函数把新创建的缓冲绑定到<code>GL_ARRAY_BUFFER</code>目标上。</p>
+<p>绑定完成后，使用的任何在GL_ARRAY_BUFFER目标上的缓冲调用都会用来配置当前绑定的缓冲(VBO)。</p>
+<p>然后调用<code>glBufferData</code>函数，它会把之前定义的顶点数据复制到缓冲的内存中。<code>glBufferData</code>是一个专门用来把用户定义的数据复制到当前绑定缓冲的函数。</p>
+<ul>
+<li>第一个参数是目标缓冲的类型：顶点缓冲对象当前绑定到<code>GL_ARRAY_BUFFER</code>目标上。</li>
+<li>第二个参数指定传输数据的大小(以字节为单位)；用一个简单的<code>sizeof</code>计算出顶点数据大小就行。</li>
+<li>第三个参数是希望发送的实际数据。</li>
+<li>第四个参数指定了我们希望显卡如何管理给定的数据。它有三种形式：
+<ul>
+<li><code>GL_STATIC_DRAW</code> ：数据不会或几乎不会改变。</li>
+<li><code>GL_DYNAMIC_DRAW</code>：数据会被改变很多。</li>
+<li><code>GL_STREAM_DRAW</code> ：数据每次绘制时都会改变。</li>
+</ul>
+</li>
+</ul>
+<p>在这里，绘制的是一个静态的三角形，每次渲染调用时都保持原样，所以它的使用类型最好是<code>GL_STATIC_DRAW</code>。</p>
+<p>如果，比如说一个缓冲中的数据将频繁被改变，那么使用的类型就是<code>GL_DYNAMIC_DRAW</code>或<code>GL_STREAM_DRAW</code>，这样就能确保显卡把数据放在能够高速写入的内存部分。</p>
+<h2 id="顶点着色器">顶点着色器</h2>
+<p>顶点着色器(Vertex Shader)是几个可编程着色器中的一个。如果打算做渲染的话，现代OpenGL需要至少设置一个顶点着色器和一个片段着色器。</p>
+<p>下面给出一个简单的顶点着色器的源代码：</p>
+<pre><code class="language-GLSL">#version 330 core
+layout (location = 0) in vec3 aPos;
+
+void main()
+{
+    gl_Position = vec4(aPos.x, aPos.y, aPos.z, 1.0);
+}
+</code></pre>
+<p>GLSL看起来很像C语言。每个着色器都起始于一个版本声明。GLSL版本号和OpenGL的版本是匹配的（比如说GLSL 420版本对应于OpenGL 4.2）。</p>
+<p>使用<code>in</code>关键字，可以在顶点着色器中声明所有的输入顶点属性。现在只关心位置数据，所以只需要一个顶点属性。</p>
+<p>GLSL有一个向量数据类型，它包含1到4个<code>float</code>分量，包含的数量可以从它的后缀数字看出来。</p>
+<p>由于每个顶点都有一个3D坐标，就创建一个<code>vec3</code>输入变量<code>aPos</code>。通过<code>layout (location = 0)</code>设定了输入变量的位置值。</p>
+<p>在GLSL中一个向量有最多4个分量，每个分量值都代表空间中的一个坐标，它们可以通过<code>vec.x</code>、<code>vec.y</code>、<code>vec.z</code>和<code>vec.w</code>来获取。注意<code>vec.w</code>分量不是用作表达空间中的位置的，而是用在所谓透视除法上。</p>
+<p>为了设置顶点着色器的输出，必须把位置数据赋值给预定义的gl_Position变量，它在幕后是vec4类型的。</p>
+<p>在main函数的最后，<code>gl_Position</code>设置的值会成为该顶点着色器的输出。</p>
+<p>由于输入是一个3分量的向量，必须把它转换为4分量的。这里把把<code>vec3</code>的数据作为<code>vec4</code>构造器的参数，同时把<code>w</code>分量设置为<code>1.0f</code>来完成这一任务。</p>
+<p>这里我们对输入数据什么都没有处理就把它传到着色器的输出了，因为这里的数据是定义好的标准化设备坐标。而在真实的程序里输入数据通常都不是标准化设备坐标，所以必须先把它们转换至OpenGL的可视区域内。</p>
+<h2 id="片段着色器">片段着色器</h2>
+<p>片段着色器所做的是计算像素最后的颜色输出。</p>
+<p>在计算机图形中颜色被表示为有4个元素的数组：红色、绿色、蓝色和alpha(透明度)分量，通常缩写为RGBA。</p>
+<p>当在OpenGL或GLSL中定义一个颜色的时候，把颜色每个分量的强度设置在0.0到1.0之间。</p>
+<p>比如说设置红为1.0f，绿为1.0f，会得到两个颜色的混合色，即黄色。</p>
+<p>这三种颜色分量的不同调配可以生成超过1600万种不同的颜色。</p>
+<p>下面给出片段着色器的示例代码：</p>
+<pre><code class="language-GLSL">#version 330 core
+out vec4 FragColor;
+
+void main()
+{
+    FragColor = vec4(1.0f, 0.5f, 0.2f, 1.0f);
+} 
+</code></pre>
+<p>片段着色器只需要一个输出变量，这个变量是一个4分量向量，它表示的是最终的输出颜色，应该自己将其计算出来。</p>
+<p>声明输出变量可以使用<code>out</code>关键字，这里我们命名为<code>FragColor</code>。然后将一个橘黄色的<code>vec4</code>赋值给颜色输出。</p>
+<h2 id="编译着色器">编译着色器</h2>
+<p>在这里，为了简单起见，先暂时将源代码直接以字符串形式储存直接存储在代码。</p>
+<p>为了能够让OpenGL使用着色器，必须在运行时动态编译它的源代码。编译方法如下：</p>
+<pre><code class="language-C++">const char *vertexShaderSource = &quot;#version 330 core\n&quot;
+    &quot;layout (location = 0) in vec3 aPos;\n&quot;
+    &quot;void main()\n&quot;
+    &quot;{\n&quot;
+    &quot;   gl_Position = vec4(aPos.x, aPos.y, aPos.z, 1.0);\n&quot;
+    &quot;}\0&quot;;
+
+const char *fragmentShaderSource = &quot;#version 330 core\n&quot;
+    &quot;out vec4 FragColor;\n&quot;
+    &quot;void main()\n&quot;
+    &quot;{\n&quot;
+    &quot;   FragColor = vec4(1.0f, 0.1f, 0.1f, 1.0f);\n&quot;
+    &quot;}\0&quot;;
+
+unsigned int vertexShader;
+vertexShader = glCreateShader(GL_VERTEX_SHADER);
+
+unsigned int fragmentShader;
+fragmentShader = glCreateShader(GL_FRAGMENT_SHADER);
+
+glShaderSource(vertexShader, 1, &amp;vertexShaderSource, NULL);
+glCompileShader(vertexShader);
+
+glShaderSource(fragmentShader, 1, &amp;fragmentShaderSource, NULL);
+glCompileShader(fragmentShader);
+</code></pre>
+<p>首先创建一个着色器对象，注意还是用ID来引用的。用unsigned int储存这个顶点着色器，然后用glCreateShader创建这个着色器。</p>
+<p>把需要创建的着色器类型以参数形式提供给<code>glCreateShader</code>。创建一个顶点着色器传递的参数是<code>GL_VERTEX_SHADER</code>，创建片段着色器时使用<code>GL_FRAGMENT_SHADER</code>作为着色器类型。</p>
+<p>接着把这个着色器源码附加到着色器对象上，然后编译它。<br>
+<code>glShaderSource</code>函数把要编译的着色器对象作为第一个参数。第二个参数指定了传递的源码字符串数量，这里只有一个。第三个参数是顶点着色器真正的源码，第四个参数设置为<code>NULL</code>。</p>
+<p>检测编译时错误可以通过以下代码来实现：</p>
+<pre><code class="language-c++">int  success;
+char infoLog[512];
+glGetShaderiv(vertexShader, GL_COMPILE_STATUS, &amp;success);
+
+if(!success)
+{
+    glGetShaderInfoLog(vertexShader, 512, NULL, infoLog);
+    std::cout &lt;&lt; &quot;ERROR::SHADER::VERTEX::COMPILATION_FAILED\n&quot; &lt;&lt; infoLog &lt;&lt; std::endl;
+}
+</code></pre>
+<p>首先定义一个整型变量来表示是否成功编译，还定义了一个储存错误消息（如果有的话）的容器。<br>
+然后用<code>glGetShaderiv</code>检查是否编译成功。如果编译失败，用<code>glGetShaderInfoLog</code>获取错误消息，然后打印它。</p>
+<p>如果编译的时候没有检测到任何错误，着色器就被编译成功了。</p>
+<h2 id="链接着色器">链接着色器</h2>
+<p>着色器程序对象是多个着色器合并之后并最终链接完成的版本。如果要使用刚才编译的着色器，必须把它们链接为一个着色器程序对象，然后在渲染对象的时候激活这个着色器程序。</p>
+<p>已激活着色器程序的着色器将在发送渲染调用的时候被使用。</p>
+<p>当链接着色器至一个程序的时候，它会把每个着色器的输出链接到下个着色器的输入。当输出和输入不匹配的时候，会得到一个连接错误。</p>
+<pre><code class="language-c++">unsigned int shaderProgram;
+shaderProgram = glCreateProgram();
+glAttachShader(shaderProgram, vertexShader);
+glAttachShader(shaderProgram, fragmentShader);
+glLinkProgram(shaderProgram);
+glUseProgram(shaderProgram);
+
+glDeleteShader(vertexShader);
+glDeleteShader(fragmentShader);
+</code></pre>
+<p><code>glCreateProgram</code>函数创建一个程序，并返回新创建程序对象的ID引用。</p>
+<p>接着把之前编译的着色器附加到程序对象上，然后用<code>glLinkProgram</code>链接它们。</p>
+<p>链接完成后得到的结果就是一个程序对象，下一步可以调用<code>glUseProgram</code>函数，用刚创建的程序对象作为它的参数，以激活这个程序对象。</p>
+<p>在<code>glUseProgram</code>函数调用之后，每个着色器调用和渲染调用都会使用这个程序对象（也就是之前写的着色器）了。</p>
+<p>最后使用<code>glDeleteShader</code>删除原来的着色器对象，因为已经绑定到着色器程序中了。</p>
+<p>就像着色器的编译一样，也可以检测链接着色器程序是否失败，并获取相应的日志。</p>
+<pre><code class="language-c++">glGetProgramiv(shaderProgram, GL_LINK_STATUS, &amp;success);
+if(!success) {
+    glGetProgramInfoLog(shaderProgram, 512, NULL, infoLog);
+    ...
+}
+</code></pre>
+<p>如果链接的时候没有检测到任何错误，着色器就被链接成功了。</p>
+<p>现在，我们已经把输入顶点数据发送给了GPU，并指示了GPU如何在顶点和片段着色器中处理它。但是OpenGL还不知道它该如何解释内存中的顶点数据，以及它该如何将顶点数据链接到顶点着色器的属性上。我们需要告诉OpenGL怎么做。</p>
+<h2 id="链接顶点属性">链接顶点属性</h2>
+<p>顶点着色器允许我们指定任何以顶点属性为形式的输入。这使其具有很强的灵活性的同时，它还的确意味着我们必须手动指定输入数据的哪一个部分对应顶点着色器的哪一个顶点属性。所以，我们必须在渲染前指定OpenGL该如何解释顶点数据。</p>
+<p>顶点数据应当被解析为如下形式：</p>
+<ul>
+<li>位置数据被储存为32位（4字节）浮点值。</li>
+<li>每个位置包含3个这样的值。</li>
+<li>在这3个值之间没有空隙（或其他值）。</li>
+<li>数据中第一个值在缓冲开始的位置。</li>
+</ul>
+<p>有了这些信息我们就可以使用<code>glVertexAttribPointer</code>函数告诉OpenGL该如何解析顶点数据（应用到逐个顶点属性上）。</p>
+<p>每个顶点属性从一个<code>VBO</code>管理的内存中获得它的数据，而具体是从哪个<code>VBO</code>（程序中可以有多个VBO）获取则是通过在调用<code>glVertexAttribPointer</code>时绑定到<code>GL_ARRAY_BUFFER</code>的<code>VBO</code>决定的。</p>
+<p>由于在调用<code>glVertexAttribPointer</code>之前绑定的是先前定义的<code>VBO</code>对象，顶点属性<code>0</code>现在会链接到它的顶点数据。</p>
+<pre><code class="language-C++">glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
+glEnableVertexAttribArray(0);
+</code></pre>
+<p>glVertexAttribPointer函数的参数非常多，所以我会逐一介绍它们：</p>
+<ul>
+<li>第一个参数指定我们要配置的顶点属性。在顶点着色器中使用了<code>layout(location = 0)</code>定义了<code>position</code>顶点属性的位置值吗，它可以把顶点属性的位置值设置为0。因为我们希望把数据传递到这一个顶点属性中，所以这里我们传入0。</li>
+<li>第二个参数指定顶点属性的大小。顶点属性是一个<code>vec3</code>，它由3个值组成，所以大小是3。</li>
+<li>第三个参数指定数据的类型，这里是<code>GL_FLOAT</code>(GLSL中<code>vec*</code>都是由浮点数值组成的)。</li>
+<li>第四个参数定义我们是否希望数据被标准化。如果我们设置为<code>GL_TRUE</code>，所有数据都会被映射到0（对于有符号型signed数据是-1）到1之间。我们把它设置为<code>GL_FALSE</code>。</li>
+<li>第五个参数叫做步长，它告诉我们在连续的顶点属性组之间的间隔。由于下个组位置数据在3个float之后，我们把步长设置为<code>3 * sizeof(float)</code>。要注意的是由于我们知道这个数组是紧密排列的（在两个顶点属性之间没有空隙）我们也可以设置为0来让OpenGL决定具体步长是多少（只有当数值是紧密排列时才可用）。一旦我们有更多的顶点属性，我们就必须更小心地定义每个顶点属性之间的间隔（这个参数的意思简单说就是从这个属性第二次出现的地方到整个数组0位置之间有多少字节）。</li>
+<li>最后一个参数的类型是<code>void*</code>，所以需要我们进行这个奇怪的强制类型转换。它表示位置数据在缓冲中起始位置的偏移量。由于位置数据在数组的开头，所以这里是0。</li>
+</ul>
+<p>最后使用<code>glEnableVertexAttribArray</code>，以顶点属性位置值作为参数，启用顶点属性；顶点属性默认是禁用的。</p>
+<h2 id="顶点数组">顶点数组</h2>
+<p>目前而言，已经完成了绘制前的设置。每次绘制一个物体的时候，都需要重复如下流程：</p>
+<pre><code class="language-c++">// 0. 复制顶点数组到缓冲中供OpenGL使用
+glBindBuffer(GL_ARRAY_BUFFER, VBO);
+glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
+// 1. 设置顶点属性指针
+glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
+glEnableVertexAttribArray(0);
+// 2. 当我们渲染一个物体时要使用着色器程序
+glUseProgram(shaderProgram);
+// 3. 绘制物体
+someOpenGLFunctionThatDraws();
+</code></pre>
+<p>但是，如果有超过5个顶点属性，上百个不同物体甚至更多的话，绑定正确的缓冲对象，为每个物体配置所有顶点属性很快就变成一件麻烦事。</p>
+<p>顶点数组对象(Vertex Array Object, VAO)可以像顶点缓冲对象那样被绑定，任何随后的顶点属性调用都会储存在这个VAO中。这样的好处就是，当配置顶点属性指针时，你只需要将那些调用执行一次，之后再绘制物体的时候只需要绑定相应的VAO就行了。这使在不同顶点数据和属性配置之间切换变得非常简单，只需要绑定不同的VAO就行了。</p>
+<p>OpenGL的<strong>核心模式</strong>要求我们使用VAO，所以它知道该如何处理顶点输入。如果绑定VAO失败，OpenGL会拒绝绘制任何东西。</p>
+<p>一个顶点数组对象会储存以下这些内容：</p>
+<ul>
+<li><code>glEnableVertexAttribArray</code>和<code>glDisableVertexAttribArray</code>的调用。</li>
+<li>通过<code>glVertexAttribPointer</code>设置的顶点属性配置。</li>
+<li>通过<code>glVertexAttribPointer</code>调用与顶点属性关联的顶点缓冲对象。</li>
+</ul>
+<pre><code class="language-c++">unsigned int VAO;
+glGenVertexArrays(1, &amp;VAO);
+</code></pre>
+<p>创建一个<code>VAO</code>和创建一个<code>VBO</code>很类似，要想使用<code>VAO</code>，要做的只是使用<code>glBindVertexArray</code>绑定<code>VAO</code>。从绑定之后起，我们应该绑定和配置对应的<code>VBO</code>和属性指针，之后解绑<code>VAO</code>供之后使用。</p>
+<p>当拥有<code>VAO</code>后，想要绘制一个物体时，只要在绘制物体前简单地把<code>VAO</code>绑定到希望使用的设定上就行了。其流程如下：</p>
+<pre><code class="language-c++">// ..:: 初始化代码（只运行一次 (除非你的物体频繁改变)） :: ..
+// 1. 绑定VAO
+glBindVertexArray(VAO);
+// 2. 把顶点数组复制到缓冲中供OpenGL使用
+glBindBuffer(GL_ARRAY_BUFFER, VBO);
+glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
+// 3. 设置顶点属性指针
+glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
+glEnableVertexAttribArray(0);
+
+[...]
+
+// ..:: 绘制代码（渲染循环中） :: ..
+// 4. 绘制物体
+glUseProgram(shaderProgram);
+glBindVertexArray(VAO);
+someOpenGLFunctionThatDraws();
+</code></pre>
+<p>一般当你打算绘制多个物体时，你首先要生成/配置所有的VAO（和必须的VBO及属性指针），然后储存它们供后面使用。当打算绘制物体的时候就拿出相应的VAO，绑定它，绘制完物体后，再解绑VAO。</p>
+<h2 id="绘制一个三角形">绘制一个三角形</h2>
+<pre><code class="language-c++">glUseProgram(shaderProgram);
+glBindVertexArray(VAO);
+glDrawArrays(GL_TRIANGLES, 0, 3);
+</code></pre>
+<p><code>glDrawArrays</code>函数第一个参数是打算绘制的OpenGL图元的类型。由于希望绘制的是一个三角形，这里传递<code>GL_TRIANGLES</code>给它。第二个参数指定了顶点数组的起始索引，这里填0。最后一个参数指定打算绘制多少个顶点，这里是3（只从数据中渲染一个三角形，它只有3个顶点长）。</p>
+<p>最后给出完整代码：</p>
+<pre><code class="language-c++">#include &lt;GL/glew.h&gt;
+#include &lt;GLFW/glfw3.h&gt;
+#include &lt;iostream&gt;
+
+const unsigned int SCR_WIDTH = 800;
+const unsigned int SCR_HEIGHT = 600;
+
+// process all input: query GLFW whether relevant keys are pressed/released this frame and react accordingly
+// ---------------------------------------------------------------------------------------------------------
+void processInput(GLFWwindow* window)
+{
+    if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS)
+        glfwSetWindowShouldClose(window, true);
+}
+
+// glfw: whenever the window size changed (by OS or user resize) this callback function executes
+// ---------------------------------------------------------------------------------------------
+void framebuffer_size_callback(GLFWwindow* window, int width, int height)
+{
+    // make sure the viewport matches the new window dimensions; note that width and 
+    // height will be significantly larger than specified on retina displays.
+    glViewport(0, 0, width, height);
+}
+
+int main()
+{
+    // glfw: initialize and configure
+    // ------------------------------
+    glfwInit();
+    glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
+    glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
+    glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
+
+#ifdef __APPLE__
+    glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);
+#endif
+
+    // glfw window creation
+    // --------------------
+    GLFWwindow* window = glfwCreateWindow(SCR_WIDTH, SCR_HEIGHT, &quot;FirstOpenGL&quot;, NULL, NULL);
+    if (window == NULL)
+    {
+        std::cout &lt;&lt; &quot;Failed to create GLFW window&quot; &lt;&lt; std::endl;
+        glfwTerminate();
+        return -1;
+    }
+
+    glfwMakeContextCurrent(window);
+    glfwSetFramebufferSizeCallback(window, framebuffer_size_callback);
+
+    if (glewInit() != GLEW_OK)
+           std::cout &lt;&lt; &quot;error&quot; &lt;&lt; std::endl;
+    // build and compile our shader program
+    // -----------------------------------
+
+    const char* vertexShaderSource = &quot;#version 330 core\n&quot;
+    &quot;layout (location = 0) in vec3 aPos;\n&quot;
+    &quot;void main()\n&quot;
+    &quot;{\n&quot;
+    &quot;   gl_Position = vec4(aPos.x, aPos.y, aPos.z, 1.0);\n&quot;
+    &quot;}\0&quot;;
+
+    const char* fragmentShaderSource = &quot;#version 330 core\n&quot;
+    &quot;out vec4 FragColor;\n&quot;
+    &quot;void main()\n&quot;
+    &quot;{\n&quot;
+    &quot;   FragColor = vec4(1.0f, 0.5f, 0.2f, 1.0f);\n&quot;
+    &quot;}\n\0&quot;;
+
+    // vertex shader
+    unsigned int vertexShader = glCreateShader(GL_VERTEX_SHADER);
+    glShaderSource(vertexShader, 1, &amp;vertexShaderSource, NULL);
+    glCompileShader(vertexShader);
+    // check for shader compile errors
+    int success;
+    char infoLog[512];
+    glGetShaderiv(vertexShader, GL_COMPILE_STATUS, &amp;success);
+    if (!success)
+    {
+        glGetShaderInfoLog(vertexShader, 512, NULL, infoLog);
+        std::cout &lt;&lt; &quot;ERROR::SHADER::VERTEX::COMPILATION_FAILED\n&quot; &lt;&lt; infoLog &lt;&lt; std::endl;
+    }
+    // fragment shader
+    unsigned int fragmentShader = glCreateShader(GL_FRAGMENT_SHADER);
+    glShaderSource(fragmentShader, 1, &amp;fragmentShaderSource, NULL);
+    glCompileShader(fragmentShader); 
+    // check for shader compile errors
+    glGetShaderiv(fragmentShader, GL_COMPILE_STATUS, &amp;success);
+    if (!success)
+    {
+        glGetShaderInfoLog(fragmentShader, 512, NULL, infoLog);
+        std::cout &lt;&lt; &quot;ERROR::SHADER::FRAGMENT::COMPILATION_FAILED\n&quot; &lt;&lt; infoLog &lt;&lt; std::endl;
+    }
+    // link shaders
+    unsigned int shaderProgram = glCreateProgram();
+    glAttachShader(shaderProgram, vertexShader);
+    glAttachShader(shaderProgram, fragmentShader);
+    glLinkProgram(shaderProgram);
+    // check for linking errors
+    glGetProgramiv(shaderProgram, GL_LINK_STATUS, &amp;success);
+    if (!success) {
+        glGetProgramInfoLog(shaderProgram, 512, NULL, infoLog);
+        std::cout &lt;&lt; &quot;ERROR::SHADER::PROGRAM::LINKING_FAILED\n&quot; &lt;&lt; infoLog &lt;&lt; std::endl;
+    }
+    glDeleteShader(vertexShader);
+    glDeleteShader(fragmentShader);
+
+    // set up vertex data (and buffer(s)) and configure vertex attributes
+    // ------------------------------------------------------------------
+    float vertices[] = {
+        -0.5f, -0.5f, 0.0f, // left  
+         0.5f, -0.5f, 0.0f, // right 
+         0.0f,  0.5f, 0.0f  // top   
+    };
+
+    unsigned int VBO, VAO;
+    glGenVertexArrays(1, &amp;VAO);
+    glGenBuffers(1, &amp;VBO);
+    // bind the Vertex Array Object first, then bind and set vertex buffer(s), and then configure vertex attributes(s).
+    glBindVertexArray(VAO);
+
+    glBindBuffer(GL_ARRAY_BUFFER, VBO);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
+
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
+    glEnableVertexAttribArray(0);
+
+    // note that this is allowed, the call to glVertexAttribPointer registered VBO as the vertex attribute's bound vertex buffer object so afterwards we can safely unbind
+    glBindBuffer(GL_ARRAY_BUFFER, 0);
+
+    // You can unbind the VAO afterwards so other VAO calls won't accidentally modify this VAO, but this rarely happens. Modifying other
+    // VAOs requires a call to glBindVertexArray anyways so we generally don't unbind VAOs (nor VBOs) when it's not directly necessary.
+    glBindVertexArray(0);
+
+
+    // uncomment this call to draw in wireframe polygons.
+    //glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
+
+    // render loop
+    // -----------
+    while (!glfwWindowShouldClose(window))
+    {
+        // input
+        // -----
+        processInput(window);
+
+        // render
+        // ------
+        glClearColor(0.2f, 0.3f, 0.3f, 1.0f);
+        glClear(GL_COLOR_BUFFER_BIT);
+
+        // draw our first triangle
+        glUseProgram(shaderProgram);
+        glBindVertexArray(VAO); // seeing as we only have a single VAO there's no need to bind it every time, but we'll do so to keep things a bit more organized
+        glDrawArrays(GL_TRIANGLES, 0, 3);
+        // glBindVertexArray(0); // no need to unbind it every time 
+
+        // glfw: swap buffers and poll IO events (keys pressed/released, mouse moved etc.)
+        // -------------------------------------------------------------------------------
+        glfwSwapBuffers(window);
+        glfwPollEvents();
+    }
+
+    // optional: de-allocate all resources once they've outlived their purpose:
+    // ------------------------------------------------------------------------
+    glDeleteVertexArrays(1, &amp;VAO);
+    glDeleteBuffers(1, &amp;VBO);
+    glDeleteProgram(shaderProgram);
+
+    // glfw: terminate, clearing all previously allocated GLFW resources.
+    // ------------------------------------------------------------------
+    glfwTerminate();
+    return 0;
+}
+
+</code></pre>
+<p>最终结果应该显示如下图形<br>
+<img src="https://wjcsw.github.io/post-images/1692337984534.png" alt="" loading="lazy"></p>
+<h2 id="元素缓冲区">元素缓冲区</h2>
+<p>假设不再绘制一个三角形而是绘制一个矩形，那么可以通过绘制两个三角形来组成一个矩形（OpenGL主要处理三角形）。这会生成下面的顶点的集合：</p>
+<pre><code class="language-c++">float vertices[] = {
+    // 第一个三角形
+    0.5f, 0.5f, 0.0f,   // 右上角
+    0.5f, -0.5f, 0.0f,  // 右下角
+    -0.5f, 0.5f, 0.0f,  // 左上角
+    // 第二个三角形
+    0.5f, -0.5f, 0.0f,  // 右下角
+    -0.5f, -0.5f, 0.0f, // 左下角
+    -0.5f, 0.5f, 0.0f   // 左上角
+};
+</code></pre>
+<p>不难发现，里面存在着顶点的重复。而当顶点和图形数目增多时，这种重复带来的浪费是难以忍受的。</p>
+<p>更好的解决方案是只储存不同的顶点，并设定绘制这些顶点的顺序。这样子只要储存4个顶点就能绘制矩形了，之后只要指定绘制的顺序就行了。这就是元素缓冲区（EBO）对象的工作方式。</p>
+<p>EBO是一个缓冲区，就像一个顶点缓冲区对象一样，它存储 OpenGL 用来决定要绘制哪些顶点的索引。</p>
+<pre><code class="language-c++">float vertices[] = {
+    0.5f, 0.5f, 0.0f,   // 右上角
+    0.5f, -0.5f, 0.0f,  // 右下角
+    -0.5f, -0.5f, 0.0f, // 左下角
+    -0.5f, 0.5f, 0.0f   // 左上角
+};
+
+unsigned int indices[] = {
+    // 注意索引从0开始! 
+    // 此例的索引(0,1,2,3)就是顶点数组vertices的下标，
+    // 这样可以由下标代表顶点组合成矩形
+
+    0, 1, 3, // 第一个三角形
+    1, 2, 3  // 第二个三角形
+};
+
+unsigned int EBO;
+glGenBuffers(1, &amp;EBO);
+glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, EBO);
+glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(indices), indices, GL_STATIC_DRAW);
+</code></pre>
+<p>当使用索引的时候，只定义4个顶点，而不是6个。同时，需要定义出绘制出矩形所需的索引数组。</p>
+<p>与VBO类似，先绑定EBO然后用<code>glBufferData</code>把索引复制到缓冲里，只不过这次把缓冲的类型定义为<code>GL_ELEMENT_ARRAY_BUFFER</code>。</p>
+<p>最后一件要做的事是用<code>glDrawElements</code>来替换<code>glDrawArrays</code>函数，表示要从索引缓冲区渲染三角形。使用<code>glDrawElements</code>时，会使用当前绑定的索引缓冲对象中的索引进行绘制。</p>
+<pre><code class="language-c++">glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, EBO);
+glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
+</code></pre>
+<p><code>glDrawElements</code></p>
+<ul>
+<li>第一个参数指定了绘制的模式，这个和<code>glDrawArrays</code>的一样。</li>
+<li>第二个参数是我们打算绘制顶点的个数，这里填6，也就是说一共需要绘制6个顶点。</li>
+<li>第三个参数是索引的类型，这里是<code>GL_UNSIGNED_INT</code>。</li>
+<li>最后一个参数指定EBO中的偏移量（或者传递一个索引数组，但是这是当你不在使用索引缓冲对象的时候），在这里填写0。</li>
+</ul>
+<p>在绑定VAO时，绑定的最后一个元素缓冲区对象存储为VAO的元素缓冲区对象。然后，绑定到VAO也会自动绑定该EBO。</p>
+<h2 id="参考资料">参考资料</h2>
+<p>[1] https://learnopengl-cn.readthedocs.io/zh/latest/01%20Getting%20started/03%20Hello%20Window/</p>
+<p>[2] http://bit.ly/2lt7ccM</p>
+]]></content>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[[OpenGL入门教程] 2. 创建工程]]></title>
+        <id>https://wjcsw.github.io/45ZILRP0V/</id>
+        <link href="https://wjcsw.github.io/45ZILRP0V/">
+        </link>
+        <updated>2023-08-11T13:11:10.000Z</updated>
+        <content type="html"><![CDATA[<p>为了显示图形，首先要做的就是创建一个OpenGL上下文(Context)和一个用于显示的窗口。然而，这些操作在每个系统上都是不一样的，OpenGL有目的地从这些操作抽象(Abstract)出去。这意味着我们必须自己处理创建窗口，定义OpenGL上下文以及处理用户输入。</p>
+<p>我们可以使用一部分库来提供给我们一个窗口和上下文用来渲染。最流行的几个库有<strong>GLUT</strong>，<strong>SDL</strong>，<strong>SFML</strong>和<strong>GLFW</strong>。这里使用<strong>GLFW</strong>，并使用Microsoft Visual Studio 2022作为IDE。当然，使用别的IDE或者老版本也是类似的操作。</p>
+<h2 id="glfw-下载">GLFW 下载</h2>
+<p>GLFW是一个专门针对OpenGL的C语言库，它提供了一些渲染物体所需的最低限度的接口。它允许用户创建OpenGL上下文，定义窗口参数以及处理用户输入。</p>
+<p>GLFW可以从它官方网站的<a href="https://www.glfw.org/download.html">下载页</a>上获取。GLFW已经有针对Visual Studio 的预编译的二进制版本和相应的头文件，也可以下载源代码包自己编译。如果是为了完成一个完整的大项目，应该下载源代码包编译源码获得。但是，这里仅仅只介绍最基本的入门，为了简单起见，直接下载预编译的二进制版本和相应的头文件即可。</p>
+<h2 id="创建工程">创建工程</h2>
+<p>首先，打开Visual Studio，创建一个新的项目。如果VS提供了多个选项，选择Visual C++，然后选择Empty Project(空项目)</p>
+<p>为了使程序使用GLFW，我们需要把GLFW库链接(Link)进工程。这可以通过在链接器的设置里指定我们要使用<code>glfw3.lib</code>来完成，但是由于我们将第三方库放在另外的目录中，我们的工程还不知道在哪寻找这个文件。于是我们还需要将放第三方库的目录添加进设置。</p>
+<p>要添加这些目录（需要VS搜索库和include文件的地方），我们首先进入<strong>Project Properties</strong>(工程属性，在解决方案窗口里右键项目)，然后选择<strong>VC++ Directories</strong>(VC++ 目录)选项卡。分别在<code>Include Directories</code>与<code>Library Directories</code></p>
+<p>最后需要在<strong>Linker</strong>(链接器)选项卡里的<strong>Input</strong>(输入)选项卡里添加<code>glfw3.lib</code>这个文件，加到<strong>Additional Dependencies</strong>(附加依赖项)字段中。</p>
+<p>如果是Windows平台，<strong>opengl32.lib</strong>已经包含在Microsoft SDK里了，它在Visual Studio安装的时候就默认安装了。由于这里用的是VS编译器，并且是在Windows操作系统上，我们只需将<strong>opengl32.lib</strong>添加进连接器设置里就行了。</p>
+<p>如果是在Linux下需要链接<strong>libGL.so</strong>库文件，这需要添加<code>-lGL</code>到链接器设置中。如果找不到这个库可能需要安装Mesa，NVidia或AMD的开发包，这部分因平台而异。</p>
+<p>因为OpenGL只是一个标准/规范，具体的实现是由驱动开发商针对特定显卡实现的。由于OpenGL驱动版本众多，它大多数函数的位置都无法在编译时确定下来，需要在运行时查询。任务就落在了开发者身上，开发者需要在运行时获取函数地址并将其保存在一个函数指针中供以后使用。可以通过使用<strong>GLEW</strong>来获得这些函数地址。</p>
+<p>GLEW是OpenGL Extension Wrangler Library的缩写，类似地，GLEW可以从这里下载，同样可以选择下载二进制版本，如果目标平台列在上面的话，或者下载源码编译。接着，使用GLEW的静态版本<strong>glew32s.lib</strong>（注意这里的“s”），将库文件添加到你的库目录，将include内容添加到你的include目录。接下来，在VS的链接器选项里加上<strong>glew32s.lib</strong>。注意GLFW3（默认）也是编译成了一个静态库。</p>
+<p>为了静态链接GLEW，必须在包含GLEW头文件之前定义预处理器宏<code>GLEW_STATIC</code>：</p>
+<pre><code class="language-c++">#define GLEW_STATIC
+#include &lt;GL/glew.h&gt;
+</code></pre>
+<p>如果使用动态链接，那么可以省略这个宏。但是记住使用动态链接的话你需要拷贝一份.DLL文件到应用程序目录。</p>
+<h2 id="简单测试用例">简单测试用例</h2>
+<p>测试下能不能让GLFW正常工作。</p>
+<pre><code class="language-c++">#define GLEW_STATIC
+#include &lt;GL/glew.h&gt;
+// GLFW
+#include &lt;GLFW/glfw3.h&gt;
+
+int main()
+{
+    glfwInit();
+    glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
+    glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
+    glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
+    glfwWindowHint(GLFW_RESIZABLE, GL_FALSE);
+
+    GLFWwindow* window = glfwCreateWindow(800, 600, &quot;FirstOpenGL&quot;, nullptr, nullptr);
+    if (window == nullptr)
+    {
+        std::cout &lt;&lt; &quot;Failed to create GLFW window&quot; &lt;&lt; std::endl;
+        glfwTerminate();
+        return -1;
+    }
+    glfwMakeContextCurrent(window);
+
+    glewExperimental = GL_TRUE;
+    if (glewInit() != GLEW_OK)
+    {
+        std::cout &lt;&lt; &quot;Failed to initialize GLEW&quot; &lt;&lt; std::endl;
+        return -1;
+    }
+
+    while(!glfwWindowShouldClose(window))
+    {
+        glfwPollEvents();
+        glfwSwapBuffers(window);
+    }
+
+    glfwTerminate();
+    return 0;
+}
+</code></pre>
+<p>首先，新建一个<code>.cpp</code>文件，然后定义<code>GLEW_STATIC</code>宏，这是因为使用的是GLEW静态的链接库。</p>
+<p>接下来创建main函数，在这个函数中将会实例化GLFW窗口。</p>
+<p>在main函数中调用<code>glfwInit</code>函数来初始化GLFW，然后使用<code>glfwWindowHint</code>函数来配置GLFW。</p>
+<p><code>glfwWindowHint</code>函数的第一个参数代表选项的名称，可以从很多以<code>GLFW_</code>开头的枚举值中选择；<br>
+第二个参数接受一个整形，用来设置这个选项的值。该函数的所有的选项以及对应的值都可以在 GLFW’s window handling 这篇文档中找到。如果现在编译你的cpp文件得到了大量的 <code>undefined reference</code> (未定义的引用)错误，这说明你并未顺利地链接GLFW库。</p>
+<p>接下来我们创建一个窗口对象，这个窗口对象存放了所有和窗口相关的数据</p>
+<p><code>glfwCreateWindow</code>函数需要窗口的宽和高作为它的前两个参数；第三个参数表示这个窗口的名称（标题）；最后两个参数暂时忽略，先设置为空指针就行。它的返回值<code>GLFWwindow</code>对象的指针会在其他的GLFW操作中使用到。创建完窗口就可以通知GLFW将窗口的上下文设置为当前线程的主上下文了。</p>
+<p>然后初始化GLEW用于获取OpenGL的函数指针。注意，在初始化GLEW之前设置<code>glewExperimental</code>变量的值为<code>GL_TRUE</code>，这样做能让GLEW在管理OpenGL的函数指针时更多地使用现代化的技术，如果把它设置为<code>GL_FALSE</code>的话可能会在使用OpenGL的<strong>核心模式</strong>时出现一些问题。</p>
+<p>为了循环绘制图形，需要在程序中添加一个while循环，可以把它称之为游戏循环(Game Loop)，它能在我们让GLFW退出前一直保持运行。</p>
+<ul>
+<li><code>glfwWindowShouldClose</code>函数在我们每次循环的开始前检查一次GLFW是否被要求退出，如果是的话该函数返回true然后游戏循环便结束了，之后为我们就可以关闭应用程序了。</li>
+<li><code>glfwPollEvents</code>函数检查有没有触发什么事件（比如键盘输入、鼠标移动等），然后调用对应的回调函数（可以通过回调方法手动设置）。我们一般在游戏循环的开始调用事件处理函数。</li>
+<li><code>glfwSwapBuffers</code>函数会交换颜色缓冲（它是一个储存着GLFW窗口每一个像素颜色的大缓冲），它在这一迭代中被用来绘制，并且将会作为输出显示在屏幕上。</li>
+</ul>
+<p>应用程序使用单缓冲绘图时可能会存在图像闪烁的问题。 这是因为生成的图像不是一下子被绘制出来的，而是按照从左到右，由上而下逐像素地绘制而成的。最终图像不是在瞬间显示给用户，而是通过一步一步生成的，这会导致渲染的结果很不真实。为了规避这些问题，我们应用<strong>双缓冲</strong>渲染窗口应用程序。</p>
+<p>前缓冲保存着最终输出的图像，它会在屏幕上显示；而所有的的渲染指令都会在后缓冲上绘制。当所有的渲染指令执行完毕后，我们交换(Swap)前缓冲和后缓冲，这样图像就立即呈显出来，之前提到的不真实感就消除了。</p>
+<p>最后，调用<code>glfwTerminate</code>清理所有的资源并正确地退出应用程序。</p>
+<p>如果没有问题的话，运行程序应该可以看到一个黑色的窗口显示。</p>
+<h2 id="参考资料">参考资料</h2>
+<p>[1] https://learnopengl-cn.readthedocs.io/zh/latest/01%20Getting%20started/03%20Hello%20Window/</p>
+<p>[2] http://bit.ly/2lt7ccM</p>
+]]></content>
+    </entry>
+</feed>
